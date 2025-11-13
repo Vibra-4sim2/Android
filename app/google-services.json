@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "67249250744",
+    "project_id": "damm-d8e73",
+    "storage_bucket": "damm-d8e73.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:67249250744:android:2e6fe199fd4a4559afef4d",
+        "android_client_info": {
+          "package_name": "com.example.dam"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyANydgXMni4mcYkELLpgBrPHJzqjNvN-Dw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
