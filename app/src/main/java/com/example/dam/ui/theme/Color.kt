@@ -37,6 +37,7 @@ val BackgroundGradientEnd = Color(0xFF0F2419)  // Dark forest
 
 // Cards and surfaces with glassmorphism
 val CardDark = Color(0xFF1E3A30)  // Translucent dark green
+
 val CardGlass = Color(0x40FFFFFF)  // White with 25% opacity for glass effect
 val CardOverlay = Color(0x66000000)  // Black with 40% opacity
 

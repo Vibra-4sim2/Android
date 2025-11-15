@@ -17,6 +17,8 @@ data class RegisterRequest(
     @SerializedName("firstName") val firstName: String,
     @SerializedName("lastName") val lastName: String,
     @SerializedName("Gender") val Gender: String,
+    @SerializedName("birthday") val birthDate: String,  // ✅ "birthday" for backend API
+
     @SerializedName("email") val email: String,
     @SerializedName("password") val password: String
 )
@@ -145,3 +147,43 @@ data class ResetPasswordResponse(
 /*
 AJOUTEZ CE CODE À LA FIN DE VOTRE FICHIER AuthModels.kt EXISTANT
 */
+
+
+
+
+
+
+
+data class OnboardingPreferencesRequest(
+    @SerializedName("level") val level: String? = null,
+    @SerializedName("cyclingType") val cyclingType: String? = null,
+    @SerializedName("cyclingFrequency") val cyclingFrequency: String? = null,
+    @SerializedName("cyclingDistance") val cyclingDistance: String? = null,
+    @SerializedName("cyclingGroupInterest") val cyclingGroupInterest: Boolean? = null,
+    @SerializedName("hikeType") val hikeType: String? = null,
+    @SerializedName("hikeDuration") val hikeDuration: String? = null,
+    @SerializedName("hikePreference") val hikePreference: String? = null,
+    @SerializedName("campingPractice") val campingPractice: Boolean? = null,
+    @SerializedName("campingType") val campingType: String? = null,
+    @SerializedName("campingDuration") val campingDuration: String? = null
+)
+
+data class OnboardingPreferencesResponse(
+    @SerializedName("_id") val id: String,
+    @SerializedName("user") val user: String,
+    @SerializedName("level") val level: String? = null,
+    @SerializedName("cyclingType") val cyclingType: String? = null,
+    @SerializedName("cyclingFrequency") val cyclingFrequency: String? = null,
+    @SerializedName("cyclingDistance") val cyclingDistance: String? = null,
+    @SerializedName("cyclingGroupInterest") val cyclingGroupInterest: Boolean? = null,
+    @SerializedName("hikeType") val hikeType: String? = null,
+    @SerializedName("hikeDuration") val hikeDuration: String? = null,
+    @SerializedName("hikePreference") val hikePreference: String? = null,
+    @SerializedName("campingPractice") val campingPractice: Boolean? = null,
+    @SerializedName("campingType") val campingType: String? = null,
+    @SerializedName("campingDuration") val campingDuration: String? = null,
+    @SerializedName("onboardingComplete") val onboardingComplete: Boolean? = null,
+    @SerializedName("createdAt") val createdAt: String? = null,
+    @SerializedName("updatedAt") val updatedAt: String? = null,
+    @SerializedName("__v") val version: Int? = null
+)

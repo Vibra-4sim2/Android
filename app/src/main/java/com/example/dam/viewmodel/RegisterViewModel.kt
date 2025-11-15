@@ -39,6 +39,7 @@ class RegisterViewModel(
         firstName: String,
         lastName: String,
         Gender: String,
+        birthDate: String,  // ✅ NEW PARAMETER
         email: String,
         password: String,
         confirmPassword: String
@@ -49,6 +50,8 @@ class RegisterViewModel(
             Gender.isBlank() -> "Gender is required"
 //            !Gender.lowercase().matches(Regex("^(male|female|other)$")) ->
 //                "Gender must be 'male', 'female', or 'other'"
+            birthDate.isBlank() -> "Birth date is required"  // ✅ NEW VALIDATION
+
             email.isBlank() -> "Email is required"
             !android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches() ->
                 "Invalid email format"
@@ -62,24 +65,32 @@ class RegisterViewModel(
 
     /**
      * Fonction pour créer un compte
+     * ✅ UPDATED: Added birthDate parameter
      */
     fun register(
         firstName: String,
         lastName: String,
         Gender: String,
+        birthDate: String,  // ✅ NEW PARAMETER
         email: String,
         password: String,
         confirmPassword: String
     ) {
-        Log.d(TAG, "Register called with: firstName=$firstName, lastName=$lastName, Gender=$Gender, email=$email")
+        Log.d(TAG, "========== REGISTRATION ATTEMPT ==========")
+        Log.d(TAG, "firstName: '$firstName'")
+        Log.d(TAG, "lastName: '$lastName'")
+        Log.d(TAG, "Gender: '$Gender'")
+        Log.d(TAG, "birthDate: '$birthDate'")  // ✅ NEW LOG
+        Log.d(TAG, "email: '$email'")
+        Log.d(TAG, "==========================================")
 
         // Valider les champs
         val validationError = validateFields(
-            firstName, lastName, Gender, email, password, confirmPassword
+            firstName, lastName, Gender, birthDate, email, password, confirmPassword  // ✅ UPDATED
         )
 
         if (validationError != null) {
-            Log.e(TAG, "Validation error: $validationError")
+            Log.e(TAG, "❌ Validation error: $validationError")
             _uiState.value = RegisterUiState(error = validationError)
             return
         }
@@ -87,17 +98,18 @@ class RegisterViewModel(
         // Lancer l'appel API
         viewModelScope.launch {
             _uiState.value = RegisterUiState(isLoading = true)
-            Log.d(TAG, "Starting registration API call...")
+            Log.d(TAG, "📤 Starting registration API call...")
 
             when (val result = repository.register(
                 firstName = firstName,
                 lastName = lastName,
                 Gender = Gender,
+                birthDate = birthDate,  // ✅ NEW PARAMETER
                 email = email,
                 password = password
             )) {
                 is Result.Success -> {
-                    Log.d(TAG, "Registration successful! User ID: ${result.data.id}")
+                    Log.d(TAG, "✅ Registration successful! User ID: ${result.data.id}")
                     _uiState.value = RegisterUiState(
                         isLoading = false,
                         userId = result.data.id,
@@ -106,7 +118,7 @@ class RegisterViewModel(
                 }
 
                 is Result.Error -> {
-                    Log.e(TAG, "Registration failed: ${result.message}")
+                    Log.e(TAG, "❌ Registration failed: ${result.message}")
                     _uiState.value = RegisterUiState(
                         isLoading = false,
                         error = result.message
@@ -114,7 +126,7 @@ class RegisterViewModel(
                 }
 
                 is Result.Loading -> {
-                    Log.d(TAG, "Still loading...")
+                    Log.d(TAG, "⏳ Still loading...")
                     _uiState.value = RegisterUiState(isLoading = true)
                 }
             }

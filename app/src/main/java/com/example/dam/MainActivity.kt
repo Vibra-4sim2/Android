@@ -41,6 +41,8 @@ class MainActivity : ComponentActivity() {
 
         googleSignInClient = GoogleSignIn.getClient(this, gso)
 
+
+
         setContent {
             DamTheme {
                 CycleApp(googleSignInClient = googleSignInClient, activity = this)
@@ -116,13 +118,10 @@ fun NavigationGraph(
             OnboardingScreen(navController = navController)
         }
 
-        composable(NavigationRoutes.ACTIVITY1) {
-            ActivitiesSelectionScreen(navController = navController)
+        composable(NavigationRoutes.PREFERENCES) {
+            PreferencesOnboardingScreen(navController = navController)
         }
 
-        composable(NavigationRoutes.ACTIVITY2) {
-            TerrainSelectionScreen(navController = navController)
-        }
 
         composable(NavigationRoutes.PROFILE) {
             ProfileScreen(navController = navController)
@@ -139,6 +138,10 @@ fun NavigationGraph(
         composable(NavigationRoutes.HOME) {
             TabBarView(navController = navController)
         }
+
+        composable(NavigationRoutes.CREATE) {
+            CreateAdventureScreen(navController = navController)
+        }
     }
 }
 // ✅ Routes mises à jour
@@ -148,12 +151,13 @@ object NavigationRoutes {
     const val FORGOT_PASSWORD = "forgot_password"
     const val RESET_PASSWORD = "reset_password"
     const val HOME = "home"
+    const val CREATE = "createadventure"
+
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
     const val SPLASH = "splash"
     const val ONBOARDING1 = "onboarding1"
-    const val ACTIVITY1 = "ActivitiesSelectionScreen"
-    const val ACTIVITY2 = "terrain_selection"
+    const val PREFERENCES = "preferences"
     const val EDIT_PROFILE = "edit_profile"
     const val EDIT_PROFILE1 = "editProfile1"
 }

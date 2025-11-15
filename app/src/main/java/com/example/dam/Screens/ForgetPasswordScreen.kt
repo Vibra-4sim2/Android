@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -14,8 +15,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -32,30 +35,40 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import com.example.dam.viewmodel.ForgotPasswordViewModel
+import com.example.dam.ui.theme.*
 
 @Composable
 fun ForgotPasswordScreen(
     navController: NavController,
     modifier: Modifier = Modifier,
-    viewModel: ForgotPasswordViewModel = viewModel()  // ✅ This will be passed from MainActivity
+    viewModel: ForgotPasswordViewModel = viewModel()
 ) {
     var email by remember { mutableStateOf("") }
     var showVerificationDialog by remember { mutableStateOf(false) }
 
     val uiState by viewModel.uiState.collectAsState()
-    val greenColor = Color(0xFF4CAF50)
 
     // Show error dialog
     if (uiState.error != null) {
         AlertDialog(
             onDismissRequest = { viewModel.clearError() },
-            title = { Text("Error") },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.ErrorOutline, null, tint = ErrorRed, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Error", fontWeight = FontWeight.Bold)
+                }
+            },
             text = { Text(uiState.error ?: "Unknown error") },
             confirmButton = {
                 TextButton(onClick = { viewModel.clearError() }) {
-                    Text("OK", color = greenColor)
+                    Text("OK", color = GreenAccent)
                 }
-            }
+            },
+            containerColor = CardDark,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            shape = RoundedCornerShape(20.dp)
         )
     }
 
@@ -70,7 +83,6 @@ fun ForgotPasswordScreen(
     LaunchedEffect(uiState.codeVerified) {
         if (uiState.codeVerified) {
             showVerificationDialog = false
-            // ✅ Navigate to reset password screen (ViewModel is shared, so email and code are available)
             navController.navigate("reset_password")
         }
     }
@@ -87,186 +99,182 @@ fun ForgotPasswordScreen(
                 viewModel.resendCode()
             },
             isLoading = uiState.isLoading,
-            viewModel = viewModel  // ✅ Pass the same ViewModel
+            viewModel = viewModel
         )
     }
 
     Box(modifier = modifier.fillMaxSize()) {
-        // Background Top
+        // Gradient Background
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(BackgroundGradientStart, BackgroundDark, BackgroundGradientEnd)
+                    )
+                )
+        )
+
+        // Background Image
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.5f)
+                .fillMaxHeight(0.55f)
+                .align(Alignment.TopCenter)
         ) {
             Image(
                 painter = painterResource(id = R.drawable.download),
                 contentDescription = null,
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().blur(1.dp)
             )
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            colors = listOf(Color.Transparent, Color.Black)
-                        )
+                modifier = Modifier.fillMaxSize().background(
+                    Brush.verticalGradient(
+                        colors = listOf(Color.Transparent, BackgroundDark.copy(alpha = 0.7f), BackgroundDark),
+                        startY = 0f,
+                        endY = Float.POSITIVE_INFINITY
                     )
+                )
             )
         }
 
-        // Background Bottom
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .fillMaxHeight()
-                .background(Color.Black)
-        )
-
+        // Main Column
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            // Header
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+            Spacer(modifier = Modifier.height(60.dp))
+
+            // Logo and Title
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(64.dp)
+                        .background(
+                            brush = Brush.radialGradient(listOf(GreenAccent.copy(alpha = 0.3f), Color.Transparent)),
+                            shape = CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
                     Icon(
-                        imageVector = Icons.Default.DirectionsBike,
+                        imageVector = Icons.Default.LockReset,
                         contentDescription = null,
-                        tint = greenColor,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "V!BRA",
-                        color = Color.White,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
+                        tint = GreenAccent,
+                        modifier = Modifier.size(36.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
-
-                Icon(
-                    imageVector = Icons.Default.LockReset,
-                    contentDescription = null,
-                    tint = greenColor,
-                    modifier = Modifier.size(64.dp)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-
+                Text("V!BRA", color = TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
+                Text("Forgot Password?", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                 Text(
-                    text = "Forgot Password?",
-                    color = Color.White,
-                    fontSize = 28.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Enter your email to receive a verification code",
-                    color = Color.White.copy(0.7f),
+                    "Enter your email to receive a verification code",
+                    color = TextSecondary,
                     fontSize = 14.sp,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 40.dp)
+                    textAlign = TextAlign.Center
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(40.dp))
 
-            // Card
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(Color.Black.copy(0.7f))
+            // Glass Card
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                color = CardGlass,
+                shadowElevation = 8.dp,
+                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
             ) {
-                Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(20.dp)
+                Box(
+                    modifier = Modifier
+                        .background(Brush.verticalGradient(listOf(CardDark.copy(alpha = 0.6f), CardDark.copy(alpha = 0.8f))))
+                        .padding(24.dp)
                 ) {
-                    Text(
-                        "Email",
-                        color = Color.White.copy(0.7f),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    CompactTextField(
-                        value = email,
-                        onValueChange = { email = it },
-                        placeholder = "your@email.com",
-                        icon = Icons.Default.Email,
-                        greenColor = greenColor,
-                        keyboardType = KeyboardType.Email
-                    )
-
-                    Button(
-                        onClick = {
-                            if (email.isNotEmpty()) {
-                                viewModel.sendResetCode(email)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
-                        colors = ButtonDefaults.buttonColors(greenColor),
-                        shape = RoundedCornerShape(10.dp),
-                        enabled = email.isNotEmpty() && !uiState.isLoading
-                    ) {
-                        if (uiState.isLoading) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
+                    Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                        // Email
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text("Email", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            ForgotPasswordGlassTextField(
+                                value = email,
+                                onValueChange = { email = it },
+                                placeholder = "your@email.com",
+                                icon = Icons.Default.Email,
+                                keyboardType = KeyboardType.Email
                             )
-                        } else {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    "Send Verification Code",
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.SemiBold
+                        }
+
+                        // Send Button
+                        Button(
+                            onClick = {
+                                if (email.isNotEmpty()) {
+                                    viewModel.sendResetCode(email)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(56.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = email.isNotEmpty() && !uiState.isLoading
+                        ) {
+                            if (uiState.isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = BackgroundDark,
+                                    strokeWidth = 2.dp
                                 )
-                                Icon(
-                                    Icons.Default.Send,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                            } else {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Send Verification Code",
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = BackgroundDark
+                                    )
+                                    Icon(
+                                        Icons.Default.Send,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(20.dp),
+                                        tint = BackgroundDark
+                                    )
+                                }
                             }
                         }
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(32.dp))
 
             // Back to Login
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable {
-                    navController.navigate("login") {
-                        popUpTo("forgot_password") { inclusive = true }
-                    }
-                }
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = null,
-                    tint = greenColor,
+                    tint = GreenAccent,
                     modifier = Modifier.size(16.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     "Back to login",
-                    color = greenColor,
+                    color = GreenAccent,
                     fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable {
+                        navController.navigate("login") {
+                            popUpTo("forgot_password") { inclusive = true }
+                        }
+                    }
                 )
             }
 
@@ -281,10 +289,9 @@ fun VerificationCodeDialog(
     onDismiss: () -> Unit,
     onResend: () -> Unit,
     isLoading: Boolean = false,
-    viewModel: ForgotPasswordViewModel  // ✅ Receive the shared ViewModel
+    viewModel: ForgotPasswordViewModel
 ) {
     var code by remember { mutableStateOf("") }
-    val greenColor = Color(0xFF4CAF50)
     val uiState by viewModel.uiState.collectAsState()
 
     AlertDialog(
@@ -297,7 +304,7 @@ fun VerificationCodeDialog(
                 Icon(
                     imageVector = Icons.Default.VerifiedUser,
                     contentDescription = null,
-                    tint = greenColor,
+                    tint = GreenAccent,
                     modifier = Modifier.size(48.dp)
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -312,7 +319,7 @@ fun VerificationCodeDialog(
                 Text(
                     "We sent a 6-character code to $email",
                     fontSize = 14.sp,
-                    color = Color.Gray,
+                    color = TextSecondary,
                     textAlign = TextAlign.Center
                 )
 
@@ -327,9 +334,9 @@ fun VerificationCodeDialog(
                     placeholder = { Text("ABC123") },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = greenColor,
-                        focusedLabelColor = greenColor,
-                        cursorColor = greenColor
+                        focusedBorderColor = GreenAccent,
+                        focusedLabelColor = GreenAccent,
+                        cursorColor = GreenAccent
                     ),
                     modifier = Modifier.fillMaxWidth(),
                     isError = uiState.error != null
@@ -338,7 +345,7 @@ fun VerificationCodeDialog(
                 if (uiState.error != null) {
                     Text(
                         text = uiState.error ?: "",
-                        color = MaterialTheme.colorScheme.error,
+                        color = ErrorRed,
                         fontSize = 12.sp
                     )
                 }
@@ -355,10 +362,10 @@ fun VerificationCodeDialog(
                             Icons.Default.Refresh,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = greenColor
+                            tint = GreenAccent
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text("Resend Code", color = greenColor)
+                        Text("Resend Code", color = GreenAccent)
                     }
                 }
             }
@@ -370,18 +377,18 @@ fun VerificationCodeDialog(
                         viewModel.verifyResetCode(code)
                     }
                 },
-                colors = ButtonDefaults.buttonColors(greenColor),
+                colors = ButtonDefaults.buttonColors(GreenAccent),
                 enabled = code.length == 6 && !isLoading
             ) {
                 if (isLoading) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(16.dp),
-                        color = Color.White,
+                        color = BackgroundDark,
                         strokeWidth = 2.dp
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                 }
-                Text("Verify")
+                Text("Verify", color = BackgroundDark)
             }
         },
         dismissButton = {
@@ -389,64 +396,53 @@ fun VerificationCodeDialog(
                 onClick = onDismiss,
                 enabled = !isLoading
             ) {
-                Text("Cancel", color = Color.Gray)
+                Text("Cancel", color = TextTertiary)
             }
-        }
+        },
+        containerColor = CardDark,
+        titleContentColor = TextPrimary,
+        textContentColor = TextSecondary,
+        shape = RoundedCornerShape(20.dp)
     )
 }
 
+// GlassTextField (same as Login)
 @Composable
-fun CompactTextField(
+fun ForgotPasswordGlassTextField(
     value: String,
     onValueChange: (String) -> Unit,
     placeholder: String,
     icon: ImageVector,
-    greenColor: Color,
     keyboardType: KeyboardType = KeyboardType.Text,
-    isPassword: Boolean = false,
-    enabled: Boolean = true
+    isPassword: Boolean = false
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                color = Color.Black.copy(alpha = if (enabled) 0.4f else 0.2f),
-                shape = RoundedCornerShape(10.dp)
-            )
-            .padding(horizontal = 16.dp, vertical = 14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = CardGlass,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = if (enabled) greenColor else greenColor.copy(alpha = 0.5f),
-            modifier = Modifier.size(24.dp)
-        )
-
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            enabled = enabled,
-            modifier = Modifier.weight(1f),
-            textStyle = androidx.compose.ui.text.TextStyle(
-                color = Color.White,
-                fontSize = 16.sp
-            ),
-            visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
-            keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
-            cursorBrush = androidx.compose.ui.graphics.SolidColor(greenColor),
-            singleLine = true,
-            decorationBox = { innerTextField ->
-                if (value.isEmpty()) {
-                    Text(
-                        text = placeholder,
-                        color = greenColor.copy(alpha = 0.7f),
-                        fontSize = 16.sp
-                    )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, contentDescription = null, tint = GreenAccent, modifier = Modifier.size(22.dp))
+            BasicTextField(
+                value = value,
+                onValueChange = onValueChange,
+                visualTransformation = if (isPassword) PasswordVisualTransformation() else androidx.compose.ui.text.input.VisualTransformation.None,
+                keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+                textStyle = androidx.compose.ui.text.TextStyle(
+                    color = TextPrimary,
+                    fontSize = 16.sp
+                ),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(GreenAccent),
+                decorationBox = { innerTextField ->
+                    if (value.isEmpty()) Text(placeholder, color = TextSecondary)
+                    innerTextField()
                 }
-                innerTextField()
-            }
-        )
+            )
+        }
     }
 }

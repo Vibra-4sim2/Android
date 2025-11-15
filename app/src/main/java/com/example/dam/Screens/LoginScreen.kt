@@ -42,6 +42,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.dam.R
 import com.example.dam.ui.theme.*
+import com.example.dam.utils.UserPreferences
 import com.example.dam.viewmodel.LoginViewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -68,25 +69,36 @@ fun LoginScreen(
     val googleLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
+        Log.d("LoginScreen", "🔵 Google Sign-In result received: ${result.resultCode}")
+
         if (result.resultCode == Activity.RESULT_OK) {
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             try {
                 val account = task.getResult(ApiException::class.java)
                 val idToken = account?.idToken
-                Log.d("LoginScreen", "Google ID Token: $idToken")
 
-                // Ici tu peux sauvegarder le token et naviguer
-                navController.navigate("home") {
-                    popUpTo("login") { inclusive = true }
+                Log.d("LoginScreen", "✅ Google Account: ${account?.email}")
+                Log.d("LoginScreen", "🎫 ID Token: ${idToken?.take(30)}...")
+
+                if (idToken != null) {
+                    Log.d("LoginScreen", "📞 Calling viewModel.googleSignIn()")
+                    viewModel.googleSignIn(idToken)
+                } else {
+                    Log.e("LoginScreen", "❌ ID Token is null!")
                 }
             } catch (e: ApiException) {
-                Log.e("LoginScreen", "Google sign in failed", e)
+                Log.e("LoginScreen", "❌ Google sign in failed: ${e.statusCode} - ${e.message}", e)
             }
+        } else {
+            Log.e("LoginScreen", "❌ Result code: ${result.resultCode}")
         }
     }
 
+
     // Charger les credentials sauvegardés
     LaunchedEffect(Unit) {
+        googleSignInClient.signOut()
+
         val savedCredentials = loadSavedCredentials(context)
         if (savedCredentials != null) {
             email = savedCredentials.first
@@ -95,15 +107,31 @@ fun LoginScreen(
         }
     }
 
-    // Navigation après login réussi
+    // Navigation après login réussi (VERSION FUSIONNÉE)
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
             val token = viewModel.getAccessToken()
             if (token.isNotEmpty()) {
+                Log.d("LoginScreen", "✅ Login réussi")
+
+                // ✅ GARDE ton code existant
                 saveAuthData(context, token)
+
+
+                // ✅ AJOUTE la nouvelle ligne pour les préférences
+                UserPreferences.saveToken(context, token)
+
+                // ✅ GARDE ton code remember me
                 if (rememberMe) saveCredentials(context, email, password)
                 else clearSavedCredentials(context)
+
+
+                val isOnboardingComplete = UserPreferences.isOnboardingComplete(context)
+                Log.d("LoginScreen", "Onboarding complete: $isOnboardingComplete")
+
             }
+
+            // ✅ GARDE ta navigation vers home
             navController.navigate("home") {
                 popUpTo("login") { inclusive = true }
             }
@@ -196,7 +224,7 @@ fun LoginScreen(
                     Image(
                         painter = painterResource(id = R.drawable.vibra),
                         contentDescription = "Bike icon",
-                        modifier = Modifier.size(36.dp),
+                        modifier = Modifier.size(60.dp),
                         colorFilter = ColorFilter.tint(GreenAccent)
                     )
                 }
@@ -225,13 +253,13 @@ fun LoginScreen(
 
                         // Email
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Email", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("Email", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             GlassTextField(email, { email = it }, "your@email.com", Icons.Default.Email, KeyboardType.Email, false)
                         }
 
                         // Password
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Password", color = TextSecondary, fontSize = 13.sp, fontWeight = FontWeight.Medium)
+                            Text("Password", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
                             GlassTextField(password, { password = it }, "••••••••", Icons.Default.Lock, KeyboardType.Text, true)
                         }
 
@@ -355,7 +383,11 @@ fun GlassTextField(
 
 // SocialLoginButton
 @Composable
-fun SocialLoginButton(iconVector: ImageVector? = null, iconPainter: Painter? = null, onClick: (() -> Unit)? = null) {
+fun SocialLoginButton(
+    iconVector: ImageVector? = null,
+    iconPainter: Painter? = null,
+    onClick: (() -> Unit)? = null
+) {
     Surface(
         modifier = Modifier.size(54.dp),
         shape = CircleShape,
@@ -363,7 +395,10 @@ fun SocialLoginButton(iconVector: ImageVector? = null, iconPainter: Painter? = n
         border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
     ) {
         Box(
-            modifier = Modifier.fillMaxSize().background(CardDark.copy(alpha = 0.6f)).clickable { onClick?.invoke() },
+            modifier = Modifier
+                .fillMaxSize()
+                .background(CardDark.copy(alpha = 0.6f))
+                .clickable { onClick?.invoke() },
             contentAlignment = Alignment.Center
         ) {
             when {
@@ -373,6 +408,12 @@ fun SocialLoginButton(iconVector: ImageVector? = null, iconPainter: Painter? = n
         }
     }
 }
+
+
+
+
+
+
 
 // Save, Load, Clear credentials
 private fun saveCredentials(context: Context, email: String, password: String) {

@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -29,7 +30,8 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.dam.R
-import com.example.dam.ui.theme.DamTheme
+import com.example.dam.ui.theme.*
+import com.example.dam.utils.UserPreferences
 import kotlinx.coroutines.launch
 
 data class OnboardingPage(
@@ -42,6 +44,8 @@ data class OnboardingPage(
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun OnboardingScreen(navController: NavController) {
+    val context = LocalContext.current  // ✅ AJOUTÉ
+
     val pages = listOf(
         OnboardingPage(
             title = "Enjoy Outdoor",
@@ -65,12 +69,11 @@ fun OnboardingScreen(navController: NavController) {
 
     val pagerState = rememberPagerState(pageCount = { pages.size })
     val scope = rememberCoroutineScope()
-    val greenColor = Color(0xFF4CAF50)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(BackgroundDark)
     ) {
         Column(
             modifier = Modifier.fillMaxSize()
@@ -96,7 +99,7 @@ fun OnboardingScreen(navController: NavController) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Back",
-                            tint = greenColor,
+                            tint = GreenAccent,
                             modifier = Modifier.size(24.dp)
                         )
                     }
@@ -105,15 +108,18 @@ fun OnboardingScreen(navController: NavController) {
                     Spacer(modifier = Modifier.width(48.dp))
                 }
 
-                // Skip Button
+                // ✅ MODIFIÉ - Skip Button
                 Text(
                     text = "Skip",
-                    color = greenColor,
+                    color = GreenAccent,
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     modifier = Modifier.clickable {
+                        // ✅ Marquer que l'onboarding a été vu
+                        UserPreferences.setFirstLaunchComplete(context)
+
                         navController.navigate("login") {
-                            popUpTo("onboarding") { inclusive = true }
+                            popUpTo("onboarding1") { inclusive = true }
                         }
                     }
                 )
@@ -124,7 +130,7 @@ fun OnboardingScreen(navController: NavController) {
                 state = pagerState,
                 modifier = Modifier.weight(1f)
             ) { page ->
-                OnboardingPageContent(pages[page], greenColor)
+                OnboardingPageContent(pages[page])
             }
 
             // Bottom Section: Indicators + Next Button
@@ -148,26 +154,30 @@ fun OnboardingScreen(navController: NavController) {
                                 )
                                 .clip(RoundedCornerShape(4.dp))
                                 .background(
-                                    if (pagerState.currentPage == index) greenColor
-                                    else greenColor.copy(alpha = 0.3f)
+                                    if (pagerState.currentPage == index) GreenAccent
+                                    else GreenAccent.copy(alpha = 0.3f)
                                 )
                         )
                     }
                 }
 
-                // Next/Get Started Button
+                // ✅ MODIFIÉ - Next/Get Started Button
                 Box(
                     modifier = Modifier
                         .size(60.dp)
                         .clip(CircleShape)
-                        .background(greenColor)
+                        .background(GreenAccent)
                         .clickable {
                             scope.launch {
                                 if (pagerState.currentPage < pages.size - 1) {
+                                    // Aller à la page suivante
                                     pagerState.animateScrollToPage(pagerState.currentPage + 1)
                                 } else {
+                                    // Dernière page → Marquer l'onboarding comme vu et aller au login
+                                    UserPreferences.setFirstLaunchComplete(context)
+
                                     navController.navigate("login") {
-                                        popUpTo("onboarding") { inclusive = true }
+                                        popUpTo("onboarding1") { inclusive = true }
                                     }
                                 }
                             }
@@ -177,7 +187,7 @@ fun OnboardingScreen(navController: NavController) {
                     Icon(
                         imageVector = Icons.Default.ArrowForward,
                         contentDescription = "Next",
-                        tint = Color.White,
+                        tint = TextPrimary,
                         modifier = Modifier.size(28.dp)
                     )
                 }
@@ -187,7 +197,7 @@ fun OnboardingScreen(navController: NavController) {
 }
 
 @Composable
-fun OnboardingPageContent(page: OnboardingPage, greenColor: Color) {
+fun OnboardingPageContent(page: OnboardingPage) {
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -200,14 +210,14 @@ fun OnboardingPageContent(page: OnboardingPage, greenColor: Color) {
         ) {
             Text(
                 text = page.title,
-                color = Color.White,
+                color = TextPrimary,
                 fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
                 lineHeight = 42.sp
             )
             Text(
                 text = page.highlightedTitle,
-                color = greenColor,
+                color = GreenAccent,
                 fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
                 lineHeight = 42.sp
@@ -217,7 +227,7 @@ fun OnboardingPageContent(page: OnboardingPage, greenColor: Color) {
         // Description
         Text(
             text = page.description,
-            color = Color.White.copy(alpha = 0.7f),
+            color = TextSecondary,
             fontSize = 15.sp,
             lineHeight = 22.sp,
             modifier = Modifier.padding(bottom = 32.dp)
@@ -238,7 +248,7 @@ fun OnboardingPageContent(page: OnboardingPage, greenColor: Color) {
                     .background(
                         Brush.radialGradient(
                             colors = listOf(
-                                greenColor.copy(alpha = 0.1f),
+                                GreenAccent.copy(alpha = 0.1f),
                                 Color.Transparent
                             )
                         )

@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import android.util.Log
+
 
 /**
  * État de l'interface de login
@@ -20,6 +22,10 @@ data class LoginUiState(
     val error: String? = null,             // Message d'erreur s'il y en a
     val accessToken: String? = null,       // Token JWT reçu
     val isSuccess: Boolean = false         // Login réussi ?
+
+
+
+
 )
 
 /**
@@ -30,11 +36,15 @@ class LoginViewModel(
     private val repository: AuthRepository = AuthRepository()
 ) : ViewModel() {
 
+
+    private val TAG = "LoginViewModel"
+
     // État privé modifiable
     private val _uiState = MutableStateFlow(LoginUiState())
 
     // État public en lecture seule pour l'UI
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
+    private var _accessToken: String = ""
 
     /**
      * Fonction pour se connecter
@@ -82,6 +92,49 @@ class LoginViewModel(
             }
         }
     }
+
+
+
+
+
+
+
+    /**
+     * ✅ NOUVEAU: Authentification avec Google
+     */
+    fun googleSignIn(idToken: String) {
+        viewModelScope.launch {
+            Log.d(TAG, "========== GOOGLE SIGN-IN VIEWMODEL ==========")
+            Log.d(TAG, "🔵 Starting Google Sign-In with token")
+            _uiState.value = LoginUiState(isLoading = true)
+
+            when (val result = repository.googleSignIn(idToken)) {
+                is Result.Success -> {
+                    Log.d(TAG, "✅ Google Sign-In successful in ViewModel")
+                    _accessToken = result.data.accessToken
+                    _uiState.value = LoginUiState(
+                        isLoading = false,
+                        accessToken = result.data.accessToken,
+                        isSuccess = true
+                    )
+                }
+                is Result.Error -> {
+                    Log.e(TAG, "❌ Google Sign-In failed: ${result.message}")
+                    _uiState.value = LoginUiState(
+                        isLoading = false,
+                        error = result.message
+                    )
+                }
+                is Result.Loading -> {
+                    _uiState.value = LoginUiState(isLoading = true)
+                }
+            }
+        }
+    }
+
+
+
+
 
     /**
      * Effacer le message d'erreur

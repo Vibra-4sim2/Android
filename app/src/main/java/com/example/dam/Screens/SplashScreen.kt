@@ -1,5 +1,6 @@
 package com.example.dam.Screens
 
+import android.util.Log
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -13,6 +14,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -24,17 +26,18 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import androidx.navigation.compose.rememberNavController
 import com.example.dam.NavigationRoutes
-
-import com.example.dam.ui.theme.DamTheme
+import com.example.dam.ui.theme.*
+import com.example.dam.utils.UserPreferences
 import kotlinx.coroutines.delay
 import kotlin.random.Random
 
 @Composable
 fun SplashScreen(navController: NavController) {
-    val greenColor = Color(0xFF4CAF50)
+    // Use theme colors
+    val greenColor = GreenAccent
+    val backgroundColor = BackgroundDark
+    val context = LocalContext.current
 
-    // Use solid black background instead of gradient
-    val backgroundColor = Color.Black
 
     // Animations
     val infiniteTransition = rememberInfiniteTransition(label = "splash")
@@ -77,18 +80,56 @@ fun SplashScreen(navController: NavController) {
     )
 
     LaunchedEffect(Unit) {
-        visible = true
-        delay(3000) // 3 seconds delay
-        navController.navigate(NavigationRoutes.ONBOARDING1) {
-            popUpTo(NavigationRoutes.SPLASH) { inclusive = true }
-            launchSingleTop = true
+        delay(2000)
+
+        // Vérifier l'état de l'utilisateur
+        val isFirstLaunch = UserPreferences.isFirstLaunch(context)
+        val token = UserPreferences.getToken(context)
+        val isOnboardingComplete = UserPreferences.isOnboardingComplete(context)
+
+        Log.d("SplashScreen", "========== SPLASH NAVIGATION ==========")
+        Log.d("SplashScreen", "isFirstLaunch: $isFirstLaunch")
+        Log.d("SplashScreen", "token: ${token?.take(20)}")
+        Log.d("SplashScreen", "isOnboardingComplete: $isOnboardingComplete")
+
+        val destination = when {
+            // Cas 1 : Première utilisation → Onboarding
+            isFirstLaunch -> {
+                Log.d("SplashScreen", "🆕 Première utilisation → Onboarding")
+                "onboarding1"
+            }
+
+            // Cas 2 : Token existe ET préférences complétées → Home directement
+            token != null && isOnboardingComplete -> {
+                Log.d("SplashScreen", "✅ Utilisateur connecté → Home")
+                "home"
+            }
+
+            // Cas 3 : Token existe MAIS préférences pas complétées → Preferences
+            token != null && !isOnboardingComplete -> {
+                Log.d("SplashScreen", "⚠️ Token existe mais préférences incomplètes → Preferences")
+                "preferences"
+            }
+
+            // Cas 4 : Pas de token (logout ou jamais connecté) → Login
+            else -> {
+                Log.d("SplashScreen", "🔐 Pas de token → Login")
+                "login"
+            }
+        }
+
+        Log.d("SplashScreen", "→ Destination: $destination")
+        Log.d("SplashScreen", "=====================================")
+
+        navController.navigate(destination) {
+            popUpTo("splash") { inclusive = true }
         }
     }
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(backgroundColor), // Solid black background
+            .background(backgroundColor),
         contentAlignment = Alignment.Center
     ) {
         // Animated particles
@@ -133,12 +174,12 @@ fun SplashScreen(navController: NavController) {
                         withStyle(style = SpanStyle(color = greenColor)) { append("!") }
                         append("BRA")
                     },
-                    fontSize = (100 * scale).sp, // Scale animation
+                    fontSize = (100 * scale).sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 6.sp,
-                    color = greenColor.copy(alpha = glowIntensity), // Glow animation
+                    color = greenColor.copy(alpha = glowIntensity),
                     style = androidx.compose.ui.text.TextStyle(
-                        shadow = Shadow(greenColor.copy(alpha = 0.8f), Offset(0f, 0f), 40f)
+                        shadow = Shadow(GlowGreen, Offset(0f, 0f), 40f)
                     )
                 )
 
@@ -149,12 +190,12 @@ fun SplashScreen(navController: NavController) {
                         withStyle(style = SpanStyle(color = greenColor)) { append("!") }
                         append("BRA")
                     },
-                    fontSize = (100 * scale).sp, // Scale animation
+                    fontSize = (100 * scale).sp,
                     fontWeight = FontWeight.ExtraBold,
                     letterSpacing = 6.sp,
-                    color = Color.White,
+                    color = TextPrimary,
                     style = androidx.compose.ui.text.TextStyle(
-                        shadow = Shadow(greenColor.copy(alpha = 0.8f), Offset(0f, 0f), 30f)
+                        shadow = Shadow(GlowGreen, Offset(0f, 0f), 30f)
                     )
                 )
             }
@@ -180,7 +221,7 @@ fun SplashScreen(navController: NavController) {
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Light,
                 letterSpacing = 5.sp,
-                color = greenColor.copy(alpha = alpha), // Fade animation
+                color = greenColor.copy(alpha = alpha),
                 textAlign = TextAlign.Center
             )
 
@@ -191,7 +232,7 @@ fun SplashScreen(navController: NavController) {
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Light,
                 letterSpacing = 3.sp,
-                color = Color.White.copy(alpha = 0.6f * alpha), // Fade animation
+                color = TextSecondary.copy(alpha = alpha),
                 textAlign = TextAlign.Center
             )
 

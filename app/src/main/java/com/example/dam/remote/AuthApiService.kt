@@ -5,8 +5,12 @@ package com.example.dam.remote
 
 import com.example.dam.models.ForgotPasswordRequest
 import com.example.dam.models.ForgotPasswordResponse
+import com.example.dam.models.GoogleSignInRequest
+import com.example.dam.models.GoogleSignInResponse
 import com.example.dam.models.LoginRequest
 import com.example.dam.models.LoginResponse
+import com.example.dam.models.OnboardingPreferencesRequest
+import com.example.dam.models.OnboardingPreferencesResponse
 import com.example.dam.models.RegisterRequest
 import com.example.dam.models.RegisterResponse
 import com.example.dam.models.ResetPasswordRequest
@@ -114,5 +118,35 @@ interface AuthApiService {
     suspend fun resetPassword(
         @Body request: ResetPasswordRequest
     ): Response<ResetPasswordResponse>
+
+
+
+
+    /**
+     * ✅ NOUVEAU: Google Sign-In
+     * POST /auth/google
+     *
+     * @param request contient le Google ID Token
+     * @return Response avec access_token JWT
+     */
+    @POST("auth/google")
+    suspend fun googleSignIn(
+        @Body request: GoogleSignInRequest
+    ): Response<GoogleSignInResponse>
+
+
+
+
+
+
+
+
+/////for preferences
+    @POST("preferences/{userId}/onboarding")
+    suspend fun submitOnboardingPreferences(
+    @Path("userId") userId: String,
+    @Body preferences: OnboardingPreferencesRequest,
+    @Header("Authorization") token: String
+    ): Response<OnboardingPreferencesResponse>
 }
 

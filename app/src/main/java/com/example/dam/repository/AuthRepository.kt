@@ -64,6 +64,7 @@ class AuthRepository {
         firstName: String,
         lastName: String,
         Gender: String,
+        birthDate: String,  // ✅ NEW PARAMETER
         email: String,
         password: String
     ): Result<RegisterResponse> {
@@ -72,12 +73,15 @@ class AuthRepository {
                 firstName = firstName.trim(),
                 lastName = lastName.trim(),
                 Gender = Gender.uppercase(),
+                birthDate = birthDate.trim(),  // ✅ NEW FIELD
                 email = email.trim(),
                 password = password
             )
 
             Log.d(TAG, "Register request: $request")
             Log.d(TAG, "Register gender value: ${request.Gender}")
+            Log.d(TAG, "Register birthDate value: ${request.birthDate}")  // ✅ NEW LOG
+
 
             val response = RetrofitInstance.authApi.register(request)
             Log.d(TAG, "Register response code: ${response.code()}")
@@ -124,7 +128,6 @@ class AuthRepository {
     suspend fun forgotPassword(email: String): Result<ForgotPasswordResponse> {
         return try {
             val request = ForgotPasswordRequest(email = email.trim())
-
             Log.d(TAG, "ForgotPassword request: $request")
             val response = RetrofitInstance.authApi.forgotPassword(request)
             Log.d(TAG, "ForgotPassword response code: ${response.code()}")
@@ -367,6 +370,57 @@ class AuthRepository {
 
         Log.e(TAG, "Network error message: $errorMessage")
         return errorMessage
+    }
+
+
+
+
+
+
+
+    // ========== GOOGLE SIGN-IN METHOD ==========
+
+    /**
+     * Authentification avec Google
+     * POST /auth/google
+     */
+    suspend fun googleSignIn(idToken: String): Result<LoginResponse> {
+        return try {
+            val request = GoogleSignInRequest(idToken = idToken)
+
+            Log.d(TAG, "========== GOOGLE SIGN-IN REQUEST ==========")
+            Log.d(TAG, "🔵 Google ID Token (first 30 chars): ${idToken.take(30)}...")
+            Log.d(TAG, "🌐 Endpoint: POST /auth/google")
+            Log.d(TAG, "==========================================")
+
+            val response = RetrofitInstance.authApi.googleSignIn(request)
+            Log.d(TAG, "Google Sign-In response code: ${response.code()}")
+
+            if (response.isSuccessful && response.body() != null) {
+                val accessToken = response.body()!!.access_token
+                Log.d(TAG, "✅ Google Sign-In successful!")
+                Log.d(TAG, "🔑 Access token (first 30 chars): ${accessToken.take(30)}...")
+
+                // Retourner le même format que login normal
+                Result.Success(LoginResponse(accessToken = accessToken))
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "❌ Google Sign-In error: $errorBody")
+                Log.e(TAG, "❌ Response code: ${response.code()}")
+
+                val errorMessage = when (response.code()) {
+                    400 -> "Invalid Google token. Please try again."
+                    401 -> "Google authentication failed. Please try again."
+                    500 -> "Server error during Google sign-in. Please try again later."
+                    else -> parseErrorMessage(errorBody) ?: "Google sign-in failed"
+                }
+                Result.Error(errorMessage)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Google Sign-In exception: ${e.message}", e)
+            e.printStackTrace()
+            Result.Error(getNetworkErrorMessage(e))
+        }
     }
 }
 

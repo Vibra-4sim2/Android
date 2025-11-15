@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
@@ -30,12 +31,13 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
 import com.example.dam.R
 import com.example.dam.viewmodel.ForgotPasswordViewModel
+import com.example.dam.ui.theme.*
 
 @Composable
 fun ResetPasswordScreen(
     navController: NavHostController,
     modifier: Modifier = Modifier,
-    viewModel: ForgotPasswordViewModel  // ✅ Shared ViewModel from MainActivity
+    viewModel: ForgotPasswordViewModel
 ) {
     // States
     var newPassword by remember { mutableStateOf("") }
@@ -47,17 +49,13 @@ fun ResetPasswordScreen(
     // Observe ViewModel state
     val uiState by viewModel.uiState.collectAsState()
 
-    // Colors
-    val greenColor = Color(0xFF4CAF50)
-    val backgroundColor = Color.Black.copy(alpha = 0.55f)
-
     // ✅ Navigate to login when password reset is successful
     LaunchedEffect(uiState.passwordReset) {
         if (uiState.passwordReset) {
             // Show success message briefly before navigating
             kotlinx.coroutines.delay(500)
             navController.navigate("login") {
-                popUpTo(0) { inclusive = true }  // Clear entire back stack
+                popUpTo(0) { inclusive = true }
             }
         }
     }
@@ -74,7 +72,7 @@ fun ResetPasswordScreen(
                     Icon(
                         imageVector = Icons.Default.CheckCircle,
                         contentDescription = null,
-                        tint = greenColor,
+                        tint = SuccessGreen,
                         modifier = Modifier.size(48.dp)
                     )
                 }
@@ -93,9 +91,9 @@ fun ResetPasswordScreen(
                             popUpTo(0) { inclusive = true }
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(greenColor)
+                    colors = ButtonDefaults.buttonColors(GreenAccent)
                 ) {
-                    Text("Go to Login")
+                    Text("Go to Login", color = BackgroundDark)
                 }
             }
         )
@@ -104,19 +102,35 @@ fun ResetPasswordScreen(
     Box(
         modifier = modifier.fillMaxSize()
     ) {
-        // Background Image
-        Image(
-            painter = painterResource(id = R.drawable.logo),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
-
-        // Dark Overlay
+        // Background Top - Image with gradient
         Box(
             modifier = Modifier
-                .fillMaxSize()
-                .background(backgroundColor)
+                .fillMaxWidth()
+                .fillMaxHeight(0.5f)
+        ) {
+            Image(
+                painter = painterResource(id = R.drawable.logo),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, BackgroundDark)
+                        )
+                    )
+            )
+        }
+
+        // Background Bottom - Solid dark
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .fillMaxHeight()
+                .background(BackgroundDark)
         )
 
         // Loading Overlay
@@ -127,7 +141,7 @@ fun ResetPasswordScreen(
                     .background(Color.Black.copy(alpha = 0.5f)),
                 contentAlignment = Alignment.Center
             ) {
-                CircularProgressIndicator(color = greenColor)
+                CircularProgressIndicator(color = GreenAccent)
             }
         }
 
@@ -150,15 +164,15 @@ fun ResetPasswordScreen(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.DirectionsBike,
-                        contentDescription = null,
-                        tint = greenColor,
-                        modifier = Modifier.size(28.dp)
+                    Image(
+                        painter = painterResource(id = R.drawable.vibra),
+                        contentDescription = "Bike icon",
+                        modifier = Modifier.size(60.dp),
+                        colorFilter = ColorFilter.tint(GreenAccent)
                     )
                     Text(
                         text = "V!BRA",
-                        color = Color.White,
+                        color = TextPrimary,
                         fontSize = 24.sp,
                         fontWeight = FontWeight.Bold
                     )
@@ -170,7 +184,7 @@ fun ResetPasswordScreen(
                 Icon(
                     imageVector = Icons.Default.Lock,
                     contentDescription = null,
-                    tint = greenColor,
+                    tint = GreenAccent,
                     modifier = Modifier.size(64.dp)
                 )
 
@@ -178,7 +192,7 @@ fun ResetPasswordScreen(
 
                 Text(
                     text = "Reset Password",
-                    color = Color.White,
+                    color = TextPrimary,
                     fontSize = 32.sp,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
@@ -186,7 +200,7 @@ fun ResetPasswordScreen(
 
                 Text(
                     text = "Please enter your new password",
-                    color = greenColor.copy(alpha = 0.8f),
+                    color = TextSecondary,
                     fontSize = 16.sp,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.padding(horizontal = 20.dp)
@@ -202,7 +216,7 @@ fun ResetPasswordScreen(
                         .fillMaxWidth()
                         .padding(bottom = 16.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = Color(0xFFEF5350).copy(alpha = 0.2f)
+                        containerColor = ErrorRed.copy(alpha = 0.2f)
                     ),
                     shape = RoundedCornerShape(10.dp)
                 ) {
@@ -214,19 +228,19 @@ fun ResetPasswordScreen(
                         Icon(
                             imageVector = Icons.Default.Error,
                             contentDescription = null,
-                            tint = Color(0xFFEF5350)
+                            tint = ErrorRed
                         )
                         Column {
                             Text(
                                 text = uiState.error!!,
-                                color = Color.White,
+                                color = TextPrimary,
                                 fontSize = 14.sp
                             )
                             if (uiState.error!!.contains("expired", ignoreCase = true)) {
                                 Spacer(modifier = Modifier.height(4.dp))
                                 Text(
                                     text = "Please request a new code",
-                                    color = Color.White.copy(alpha = 0.7f),
+                                    color = TextSecondary,
                                     fontSize = 12.sp
                                 )
                             }
@@ -244,7 +258,6 @@ fun ResetPasswordScreen(
                 },
                 placeholder = "Enter new password",
                 icon = Icons.Default.Lock,
-                greenColor = greenColor,
                 showPassword = showNewPassword,
                 onToggleVisibility = { showNewPassword = !showNewPassword }
             )
@@ -260,7 +273,6 @@ fun ResetPasswordScreen(
                 },
                 placeholder = "Confirm new password",
                 icon = Icons.Default.LockReset,
-                greenColor = greenColor,
                 showPassword = showConfirmPassword,
                 onToggleVisibility = { showConfirmPassword = !showConfirmPassword },
                 isError = !passwordsMatch && confirmPassword.isNotEmpty()
@@ -271,7 +283,7 @@ fun ResetPasswordScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Passwords do not match",
-                    color = Color(0xFFEF5350),
+                    color = ErrorRed,
                     fontSize = 13.sp,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -283,8 +295,6 @@ fun ResetPasswordScreen(
             Button(
                 onClick = {
                     if (passwordsMatch && newPassword.isNotEmpty() && confirmPassword.isNotEmpty()) {
-                        // ✅ Call resetPassword with just the new password
-                        // Email and code are already in the ViewModel!
                         viewModel.resetPassword(newPassword)
                     }
                 },
@@ -292,8 +302,8 @@ fun ResetPasswordScreen(
                     .fillMaxWidth()
                     .height(56.dp),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = greenColor,
-                    disabledContainerColor = Color.Gray
+                    containerColor = GreenAccent,
+                    disabledContainerColor = TextTertiary
                 ),
                 shape = RoundedCornerShape(10.dp),
                 enabled = passwordsMatch &&
@@ -308,12 +318,14 @@ fun ResetPasswordScreen(
                     Text(
                         text = if (uiState.isLoading) "Resetting..." else "Reset Password",
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.SemiBold
+                        fontWeight = FontWeight.SemiBold,
+                        color = BackgroundDark
                     )
                     if (!uiState.isLoading) {
                         Icon(
                             imageVector = Icons.Default.Check,
-                            contentDescription = null
+                            contentDescription = null,
+                            tint = BackgroundDark
                         )
                     }
                 }
@@ -334,12 +346,12 @@ fun ResetPasswordScreen(
                 Icon(
                     imageVector = Icons.Default.ArrowBack,
                     contentDescription = null,
-                    tint = greenColor,
+                    tint = GreenAccent,
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
                     text = "Back to login",
-                    color = greenColor,
+                    color = GreenAccent,
                     fontSize = 14.sp
                 )
             }
@@ -355,7 +367,6 @@ fun PasswordFieldWithVisibility(
     onValueChange: (String) -> Unit,
     placeholder: String,
     icon: ImageVector,
-    greenColor: Color,
     showPassword: Boolean,
     onToggleVisibility: () -> Unit,
     isError: Boolean = false
@@ -364,7 +375,7 @@ fun PasswordFieldWithVisibility(
         modifier = Modifier
             .fillMaxWidth()
             .background(
-                color = Color.Black.copy(alpha = 0.4f),
+                color = CardDark.copy(alpha = 0.6f),
                 shape = RoundedCornerShape(10.dp)
             )
             .padding(horizontal = 16.dp, vertical = 14.dp),
@@ -374,7 +385,7 @@ fun PasswordFieldWithVisibility(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = if (isError) Color(0xFFEF5350) else greenColor,
+            tint = if (isError) ErrorRed else GreenAccent,
             modifier = Modifier.size(24.dp)
         )
 
@@ -383,18 +394,18 @@ fun PasswordFieldWithVisibility(
             onValueChange = onValueChange,
             modifier = Modifier.weight(1f),
             textStyle = androidx.compose.ui.text.TextStyle(
-                color = Color.White,
+                color = TextPrimary,
                 fontSize = 16.sp
             ),
             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-            cursorBrush = SolidColor(greenColor),
+            cursorBrush = SolidColor(GreenAccent),
             singleLine = true,
             decorationBox = { innerTextField ->
                 if (value.isEmpty()) {
                     Text(
                         text = placeholder,
-                        color = greenColor.copy(alpha = 0.7f),
+                        color = TextSecondary,
                         fontSize = 16.sp
                     )
                 }
@@ -409,7 +420,7 @@ fun PasswordFieldWithVisibility(
             Icon(
                 imageVector = if (showPassword) Icons.Default.Visibility else Icons.Default.VisibilityOff,
                 contentDescription = if (showPassword) "Hide password" else "Show password",
-                tint = greenColor,
+                tint = GreenAccent,
                 modifier = Modifier.size(22.dp)
             )
         }

@@ -1,10 +1,13 @@
 package com.example.dam.ui.theme
 
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -12,29 +15,32 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.navigation.NavController
 import androidx.navigation.NavHostController
+import com.example.dam.Screens.CreateAdventureScreen
 import com.example.dam.Screens.HomeExploreScreen
 import com.example.dam.Screens.ProfileScreen
+import com.example.dam.utils.UserPreferences
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun TabBarView(navController: NavHostController) {
-
+    val context = LocalContext.current  // ✅ AJOUTÉ
     var showOptions by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
-    // Tabs
-    val tabs = listOf("Home", "Map", "Community", "Profile", "Add")
+    val tabs = listOf("Home", "Map", "Add", "Community", "Profile")
     var selectedTab by remember { mutableStateOf(0) }
 
-    // Animation for dropdown rotation
     val rotation by animateFloatAsState(
         targetValue = if (showOptions) 180f else 0f,
         animationSpec = spring(
@@ -47,13 +53,18 @@ fun TabBarView(navController: NavHostController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color.Black)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        BackgroundGradientStart,
+                        BackgroundDark,
+                        BackgroundGradientEnd
+                    )
+                )
+            )
     ) {
-        // Main Content with TabView
-        Column(
-            modifier = Modifier.fillMaxSize()
-        ) {
-            // Space for top bar
+        // Main Content
+        Column(modifier = Modifier.fillMaxSize()) {
             Spacer(modifier = Modifier.height(60.dp))
 
             // Content Area
@@ -65,57 +76,83 @@ fun TabBarView(navController: NavHostController) {
                 when (selectedTab) {
                     0 -> HomeExploreScreen(navController = navController)
                     1 -> ScreenPlaceholder("Map View")
-                    2 -> ScreenPlaceholder("Community View")
-                    3 -> ProfileScreen(navController = navController)
-                    4 -> ScreenPlaceholder("Add View")
+                    2 -> CreateAdventureScreen(navController = navController)
+                    3 -> ScreenPlaceholder("Community View")
+                    4 -> ProfileScreen(navController = navController)
                 }
             }
-
-            // Bottom Navigation
-            BottomNavigationBar(
-                tabs = tabs,
-                selectedIndex = selectedTab,
-                onTabSelected = { selectedTab = it }
-            )
         }
 
-        // Top Bar with Dropdown (overlaying content)
+        // Top Bar with Dropdown
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .align(Alignment.TopCenter)
+                .statusBarsPadding()
         ) {
-            // Top Bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(5.dp)
-                    .background(Color.Black.copy(alpha = 0.9f))
-                    .padding(horizontal = 16.dp)
-                    .padding(top = 8.dp, bottom = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+            // Top Bar - Glass Design
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = BackgroundGradientStart
             ) {
-                Text(
-                    text = "VIBRA",
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
-                )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    CardDark.copy(alpha = 0.8f),
+                                    CardDark.copy(alpha = 0.6f)
+                                )
+                            )
+                        )
+                        .padding(horizontal = 20.dp)
+                        .padding(top = 12.dp, bottom = 14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "V!BRA",
+                            fontSize = 24.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Explore Adventures",
+                            fontSize = 12.sp,
+                            color = GreenAccent.copy(alpha = 0.7f)
+                        )
+                    }
 
-                IconButton(onClick = { showOptions = !showOptions }) {
-                    Icon(
-                        imageVector = Icons.Default.KeyboardArrowDown,
-                        contentDescription = "Menu",
-                        tint = Color.White,
-                        modifier = Modifier
-                            .size(24.dp)
-                            .rotate(rotation)
-                    )
+                    Surface(
+                        onClick = { showOptions = !showOptions },
+                        shape = CircleShape,
+                        color = BackgroundDark,
+                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(CardDark.copy(alpha = 0.5f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Menu",
+                                tint = GreenAccent,
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .rotate(rotation)
+                            )
+                        }
+                    }
                 }
             }
 
-            // Dropdown Menu with Animation
+            // Dropdown Menu
             AnimatedVisibility(
                 visible = showOptions,
                 enter = slideInVertically(
@@ -133,175 +170,340 @@ fun TabBarView(navController: NavHostController) {
                     )
                 ) + fadeOut()
             ) {
-                DropdownMenuContent(onLogout = { showLogoutDialog = true })
+                GlassDropdownMenu(onLogout = { showLogoutDialog = true })
             }
+        }
+
+        // Glass Bottom Navigation Bar
+        Box(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp, vertical = 12.dp)
+        ) {
+            GlassBottomNav(
+                tabs = tabs,
+                selectedIndex = selectedTab,
+                onTabSelected = { selectedTab = it }
+            )
         }
     }
 
-    // Logout Dialog
+    // ✅ MODIFIÉ - Logout Dialog
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
             title = {
-                Text(
-                    "Logout",
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Logout,
+                        contentDescription = null,
+                        tint = ErrorRed
+                    )
+                    Text("Logout", fontWeight = FontWeight.Bold)
+                }
             },
-            text = {
-                Text(
-                    "Are you sure you want to logout?",
-                    color = Color.White.copy(alpha = 0.8f)
-                )
-            },
+            text = { Text("Are you sure you want to logout?") },
             confirmButton = {
-                TextButton(onClick = {
-                    showLogoutDialog = false
-                    navController.navigate("login") {
-                        popUpTo("home") { inclusive = true }
-                    }
-                }) {
-                    Text("Confirm", color = Color.Red, fontWeight = FontWeight.SemiBold)
+                Button(
+                    onClick = {
+                        // ✅ NOUVEAU CODE DE LOGOUT
+                        Log.d("TabBarView", "========== LOGOUT ==========")
+                        Log.d("TabBarView", "Token avant: ${UserPreferences.getToken(context)?.take(20)}")
+
+                        // Supprimer les données utilisateur
+                        UserPreferences.clear(context)
+
+                        Log.d("TabBarView", "Token après: ${UserPreferences.getToken(context)}")
+                        Log.d("TabBarView", "============================")
+
+                        showLogoutDialog = false
+
+                        // Rediriger vers Login et vider tout le backstack
+                        navController.navigate("login") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(ErrorRed)
+                ) {
+                    Text("Confirm")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("Cancel", color = Color.Gray)
+                    Text("Cancel", color = TextTertiary)
                 }
             },
-            containerColor = Color(0xFF1C1C1E),
-            shape = RoundedCornerShape(14.dp)
+            containerColor = CardDark,
+            titleContentColor = TextPrimary,
+            textContentColor = TextSecondary,
+            shape = RoundedCornerShape(20.dp)
         )
     }
 }
 
 @Composable
-fun DropdownMenuContent(onLogout: () -> Unit) {
-    Column(
+fun GlassDropdownMenu(onLogout: () -> Unit) {
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
-            .shadow(6.dp, RoundedCornerShape(14.dp))
-            .background(
-                Color(0xFF2C2C2E).copy(alpha = 0.95f),
-                RoundedCornerShape(14.dp)
-            )
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = CardGlass,
+        shadowElevation = 8.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
     ) {
-        MenuItem(icon = Icons.Default.BookmarkBorder, label = "Saved")
-        MenuItem(icon = Icons.Default.HelpOutline, label = "Help Center")
-        MenuItem(icon = Icons.Default.Settings, label = "Settings")
-        MenuItem(
-            icon = Icons.Default.Logout,
-            label = "Logout",
-            onClick = onLogout
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            CardDark.copy(alpha = 0.7f),
+                            CardDark.copy(alpha = 0.9f)
+                        )
+                    )
+                )
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            GlassMenuItem(icon = Icons.Default.BookmarkBorder, label = "Saved")
+            GlassMenuItem(icon = Icons.Default.HelpOutline, label = "Help Center")
+            GlassMenuItem(icon = Icons.Default.Settings, label = "Settings")
+            GlassMenuItem(
+                icon = Icons.Default.Logout,
+                label = "Logout",
+                onClick = onLogout,
+                tintColor = ErrorRed
+            )
+        }
     }
 }
 
 @Composable
-fun MenuItem(
+fun GlassMenuItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    onClick: (() -> Unit)? = null
+    onClick: (() -> Unit)? = null,
+    tintColor: Color = GreenAccent
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = onClick != null) { onClick?.invoke() }
-            .background(Color.Gray.copy(alpha = 0.25f), RoundedCornerShape(10.dp))
-            .padding(vertical = 8.dp, horizontal = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    Surface(
+        onClick = { onClick?.invoke() },
+        shape = RoundedCornerShape(12.dp),
+        color = CardGlass,
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderColor),
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = Color.White,
-            modifier = Modifier.size(24.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardDark.copy(alpha = 0.3f))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = tintColor,
+                modifier = Modifier.size(25.dp)
+            )
+            Text(
+                text = label,
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = TextTertiary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun GlassBottomNav(
+    tabs: List<String>,
+    selectedIndex: Int,
+    onTabSelected: (Int) -> Unit
+) {
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Glow effect
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(70.dp)
+                .align(Alignment.Center)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            GreenAccent.copy(alpha = 0.2f),
+                            TealAccent.copy(alpha = 0.2f),
+                            GreenAccent.copy(alpha = 0.2f)
+                        )
+                    ),
+                    shape = RoundedCornerShape(35.dp)
+                )
+                .blur(12.dp)
         )
 
-        Text(
-            text = label,
-            color = Color.White,
-            fontSize = 16.sp,
-            fontWeight = FontWeight.Medium
-        )
+        // Glass navbar
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(35.dp),
+            color = CardGlass,
+            shadowElevation = 8.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                CardDark.copy(alpha = 0.5f),
+                                CardDark.copy(alpha = 0.6f),
+                                CardDark.copy(alpha = 0.5f)
+                            )
+                        )
+                    )
+                    .padding(vertical = 8.dp, horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                tabs.forEachIndexed { index, label ->
+                    if (index == 2) {
+                        // Center Add Button - Elevated
+                        Box(
+                            modifier = Modifier
+                                .size(60.dp)
+                        ) {
+                            // Glow
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.radialGradient(
+                                            colors = listOf(
+                                                GreenAccent.copy(alpha = 0.6f),
+                                                Color.Transparent
+                                            )
+                                        ),
+                                        shape = CircleShape
+                                    )
+                                    .blur(8.dp)
+                            )
 
-        Spacer(modifier = Modifier.weight(1f))
+                            // Button
+                            Surface(
+                                onClick = { onTabSelected(index) },
+                                shape = CircleShape,
+                                color = Color.Transparent,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .border(
+                                        width = 4.dp,
+                                        color = BackgroundDark,
+                                        shape = CircleShape
+                                    )
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.radialGradient(
+                                                colors = listOf(
+                                                    GreenAccent,
+                                                    TealAccent
+                                                )
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        // Regular Tab
+                        Surface(
+                            onClick = { onTabSelected(index) },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (selectedIndex == index)
+                                GreenAccent.copy(alpha = 0.15f)
+                            else
+                                Color.Transparent,
+                            modifier = Modifier
+                                .height(48.dp)
+                                .padding(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = when (label) {
+                                        "Home" -> Icons.Default.Home
+                                        "Map" -> Icons.Default.Map
+                                        "Community" -> Icons.Default.Group
+                                        "Profile" -> Icons.Default.Person
+                                        else -> Icons.Default.Home
+                                    },
+                                    contentDescription = label,
+                                    tint = if (selectedIndex == index)
+                                        GreenAccent
+                                    else
+                                        TextSecondary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
 @Composable
 fun ScreenPlaceholder(text: String) {
     Box(
-        Modifier
-            .fillMaxSize()
-            .background(Color.Black),
-        Alignment.Center
-    ) {
-        Text(text, color = Color.White, fontSize = 18.sp)
-    }
-}
-
-@Composable
-fun BottomNavigationBar(
-    tabs: List<String>,
-    selectedIndex: Int,
-    onTabSelected: (Int) -> Unit
-) {
-    NavigationBar(
-        containerColor = Color.Black,
         modifier = Modifier
-            .fillMaxWidth()
-            .height(80.dp)
+            .fillMaxSize()
+            .background(Color.Transparent),
+        contentAlignment = Alignment.Center
     ) {
-        tabs.forEachIndexed { index, label ->
-            NavigationBarItem(
-                selected = index == selectedIndex,
-                onClick = { onTabSelected(index) },
-                icon = {
-                    Icon(
-                        imageVector = when (label) {
-                            "Home" -> Icons.Default.Home
-                            "Map" -> Icons.Default.Map
-                            "Community" -> Icons.Default.Group
-                            "Profile" -> Icons.Default.Person
-                            "Add" -> Icons.Default.Add
-                            else -> Icons.Default.Home
-                        },
-                        contentDescription = label,
-                        tint = if (index == selectedIndex)
-                            Color(0xFF4CAF50)
-                        else
-                            Color.White.copy(alpha = 0.6f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                },
-                label = {
-                    Text(
-                        text = label,
-                        color = if (index == selectedIndex)
-                            Color(0xFF4CAF50)
-                        else
-                            Color.White.copy(alpha = 0.6f),
-                        fontSize = 11.sp,
-                        fontWeight = if (index == selectedIndex)
-                            FontWeight.SemiBold
-                        else
-                            FontWeight.Normal
-                    )
-                },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = Color(0xFF4CAF50),
-                    selectedTextColor = Color(0xFF4CAF50),
-                    unselectedIconColor = Color.White.copy(alpha = 0.6f),
-                    unselectedTextColor = Color.White.copy(alpha = 0.6f),
-                    indicatorColor = Color.Transparent
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = CardGlass,
+            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+        ) {
+            Box(
+                modifier = Modifier
+                    .background(CardDark.copy(alpha = 0.6f))
+                    .padding(32.dp)
+            ) {
+                Text(
+                    text = text,
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium
                 )
-            )
+            }
         }
     }
 }
