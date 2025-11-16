@@ -26,9 +26,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-import com.example.dam.Screens.CreateAdventureScreen
 import com.example.dam.Screens.HomeExploreScreen
 import com.example.dam.Screens.ProfileScreen
+import com.example.dam.Screens.CreateAdventureScreen
 import com.example.dam.utils.UserPreferences
 
 @OptIn(ExperimentalAnimationApi::class)
@@ -76,8 +76,14 @@ fun TabBarView(navController: NavHostController) {
                 when (selectedTab) {
                     0 -> HomeExploreScreen(navController = navController)
                     1 -> ScreenPlaceholder("Map View")
-                    2 -> CreateAdventureScreen(navController = navController)
-                    3 -> ScreenPlaceholder("Community View")
+                    2 -> {
+                        // GET TOKEN
+                        val token = UserPreferences.getToken(context) ?: ""
+                        CreateAdventureScreen(
+                            navController = navController,
+                            token = token  // PASSED HERE
+                        )
+                    }                    3 -> ScreenPlaceholder("Community View")
                     4 -> ProfileScreen(navController = navController)
                 }
             }
@@ -244,6 +250,9 @@ fun TabBarView(navController: NavHostController) {
         )
     }
 }
+
+
+
 
 @Composable
 fun GlassDropdownMenu(onLogout: () -> Unit) {

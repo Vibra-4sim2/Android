@@ -7,6 +7,9 @@
     <!-- Permissions nécessaires -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
+
 
 
     <application
@@ -33,6 +36,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <!-- AndroidManifest.xml -->
+        <meta-data
+            android:name="com.google.android.geo.API_KEY"
+            android:value="AIzaSyDBAlApULWx9IjcK-z7k8i46QcD4h9I20o" />
+        <meta-data
+            android:name="com.google.android.gms.maps.DISABLE_LOCATION_UPDATES"
+            android:value="true"/>
     </application>
 
 </manifest>
+
+

@@ -1,6 +1,7 @@
 <resources>
     <string name="app_name">dam</string>
     <string name="default_web_client_id">67249250744-fqr2ccnoipafqcr2gesmhueg4h6orr7m.apps.googleusercontent.com</string>
-
+    <!-- res/values/strings.xml -->
+    <string name="google_maps_key">AIzaSyAIovPX22REQAo-VSEKuI95LPP-Kk2S-zY</string>
 </resources>
 

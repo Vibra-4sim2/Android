@@ -3,6 +3,7 @@ package com.example.dam.Screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -22,89 +23,25 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
+import coil.compose.AsyncImage
 import com.example.dam.R
+import com.example.dam.models.SortieResponse
 import com.example.dam.ui.theme.*
+import com.example.dam.viewmodel.HomeExploreViewModel
+import java.text.SimpleDateFormat
+import java.util.*
 
-data class RideEvent(
-    val id: Int,
-    val title: String,
-    val location: String,
-    val time: String,
-    val difficulty: String,
-    val distance: String,
-    val participants: Int,
-    val imageRes: Int,
-    val profileImageRes: Int,
-    val category: String
-)
-
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeExploreScreen(navController: NavController) {
-    var selectedFilter by remember { mutableStateOf("explore") }
-    var searchQuery by remember { mutableStateOf("") }
-
-    val allEvents = listOf(
-        RideEvent(
-            id = 1,
-            title = "Morning Ride",
-            location = "La Marsa",
-            time = "8:30 AM",
-            difficulty = "Medium",
-            distance = "25 km",
-            participants = 12,
-            imageRes = R.drawable.homme,
-            profileImageRes = R.drawable.camping,
-            category = "cycling"
-        ),
-        RideEvent(
-            id = 2,
-            title = "Weekend Mountain",
-            location = "Mountain",
-            time = "6:30 AM",
-            difficulty = "Hard",
-            distance = "45 km",
-            participants = 8,
-            imageRes = R.drawable.camping,
-            profileImageRes = R.drawable.homme,
-            category = "camping"
-        ),
-        RideEvent(
-            id = 3,
-            title = "Sunrise Hike",
-            location = "Atlas Mountains",
-            time = "5:00 AM",
-            difficulty = "Easy",
-            distance = "12 km",
-            participants = 15,
-            imageRes = R.drawable.jbal,
-            profileImageRes = R.drawable.homme,
-            category = "hiking"
-        ),
-        RideEvent(
-            id = 4,
-            title = "Desert Camp",
-            location = "Tozeur",
-            time = "6:00 PM",
-            difficulty = "Easy",
-            distance = "5 km",
-            participants = 6,
-            imageRes = R.drawable.download,
-            profileImageRes = R.drawable.homme,
-            category = "camping"
-        )
-    )
-
-    val filteredEvents = when (selectedFilter) {
-        "cycling" -> allEvents.filter { it.category == "cycling" }
-        "hiking" -> allEvents.filter { it.category == "hiking" }
-        "camping" -> allEvents.filter { it.category == "camping" }
-        else -> allEvents
-    }
+fun HomeExploreScreen(
+    navController: NavController,
+    viewModel: HomeExploreViewModel = viewModel()
+) {
+    val filteredSorties = viewModel.getFilteredSorties()
 
     Box(
         modifier = Modifier
@@ -130,47 +67,6 @@ fun HomeExploreScreen(navController: NavController) {
             ) {
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Logo and Profile Row
-//                Row(
-//                    modifier = Modifier.fillMaxWidth(),
-//                    horizontalArrangement = Arrangement.SpaceBetween,
-//                    verticalAlignment = Alignment.CenterVertically
-//                ) {
-//                    Column {
-//                        Text(
-//                            text = "VIBRA",
-//                            color = TextPrimary,
-//                            fontSize = 24.sp,
-//                            fontWeight = FontWeight.Bold,
-//                            letterSpacing = 1.sp
-//                        )
-//                        Text(
-//                            text = "Explore Adventures",
-//                            color = GreenAccent.copy(alpha = 0.7f),
-//                            fontSize = 14.sp
-//                        )
-//                    }
-//
-//                    // Profile Avatar
-//                    Box(
-//                        modifier = Modifier
-//                            .size(40.dp)
-//                            .clip(CircleShape)
-//                            .border(2.dp, GreenAccent.copy(alpha = 0.5f), CircleShape)
-//                            .background(CardDark)
-//                    ) {
-//                        Icon(
-//                            imageVector = Icons.Default.Person,
-//                            contentDescription = "Profile",
-//                            tint = GreenAccent,
-//                            modifier = Modifier
-//                                .align(Alignment.Center)
-//                                .size(24.dp)
-//                        )
-//                    }
-//                }
-//
-//                Spacer(modifier = Modifier.height(20.dp))
 
                 // Glass Search Bar
                 Box(
@@ -217,8 +113,8 @@ fun HomeExploreScreen(navController: NavController) {
                             )
 
                             androidx.compose.foundation.text.BasicTextField(
-                                value = searchQuery,
-                                onValueChange = { searchQuery = it },
+                                value = viewModel.searchQuery,
+                                onValueChange = { viewModel.updateSearchQuery(it) },
                                 modifier = Modifier
                                     .weight(1f)
                                     .padding(horizontal = 12.dp),
@@ -227,7 +123,7 @@ fun HomeExploreScreen(navController: NavController) {
                                     fontSize = 16.sp
                                 ),
                                 decorationBox = { innerTextField ->
-                                    if (searchQuery.isEmpty()) {
+                                    if (viewModel.searchQuery.isEmpty()) {
                                         Text(
                                             "Search adventures...",
                                             color = TextSecondary,
@@ -239,12 +135,17 @@ fun HomeExploreScreen(navController: NavController) {
                             )
 
                             IconButton(
-                                onClick = { },
+                                onClick = {
+                                    if (viewModel.searchQuery.isNotEmpty()) {
+                                        viewModel.updateSearchQuery("")
+                                    }
+                                },
                                 modifier = Modifier.size(40.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Mic,
-                                    contentDescription = "Voice",
+                                    imageVector = if (viewModel.searchQuery.isEmpty())
+                                        Icons.Default.Mic else Icons.Default.Clear,
+                                    contentDescription = if (viewModel.searchQuery.isEmpty()) "Voice" else "Clear",
                                     tint = GreenAccent.copy(alpha = 0.7f),
                                     modifier = Modifier.size(20.dp)
                                 )
@@ -264,50 +165,209 @@ fun HomeExploreScreen(navController: NavController) {
                         FilterPill(
                             text = "Explore",
                             icon = Icons.Default.Explore,
-                            isSelected = selectedFilter == "explore",
-                            onClick = { selectedFilter = "explore" }
+                            isSelected = viewModel.selectedFilter == "explore",
+                            onClick = { viewModel.setFilter("explore") }
                         )
                     }
                     item {
                         FilterPill(
-                            text = "Followers",
-                            icon = Icons.Default.Group,
-                            isSelected = selectedFilter == "followers",
-                            onClick = { selectedFilter = "followers" }
+                            text = "Cycling",
+                            icon = Icons.Default.DirectionsBike,
+                            isSelected = viewModel.selectedFilter == "cycling",
+                            onClick = { viewModel.setFilter("cycling") }
                         )
                     }
                     item {
                         FilterPill(
-                            text = "Recommended",
-                            icon = Icons.Default.Star,
-                            isSelected = selectedFilter == "recommended",
-                            onClick = { selectedFilter = "recommended" }
+                            text = "Hiking",
+                            icon = Icons.Default.Hiking,
+                            isSelected = viewModel.selectedFilter == "hiking",
+                            onClick = { viewModel.setFilter("hiking") }
                         )
                     }
                     item {
                         FilterPill(
-                            text = "Trending",
-                            icon = Icons.Default.TrendingUp,
-                            isSelected = selectedFilter == "trending",
-                            onClick = { selectedFilter = "trending" }
+                            text = "Camping",
+                            icon = Icons.Default.Terrain,
+                            isSelected = viewModel.selectedFilter == "camping",
+                            onClick = { viewModel.setFilter("camping") }
                         )
                     }
                 }
             }
 
-            // Activities List
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(filteredEvents) { event ->
-                    ModernEventCard(event)
+            // Content Section with States
+            Box(modifier = Modifier.fillMaxSize()) {
+                when {
+                    viewModel.isLoading && viewModel.sorties.isEmpty() -> {
+                        // Initial Loading State
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                CircularProgressIndicator(
+                                    color = GreenAccent,
+                                    strokeWidth = 3.dp,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Text(
+                                    "Loading adventures...",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+
+                    viewModel.errorMessage != null && viewModel.sorties.isEmpty() -> {
+                        // Error State
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier.padding(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.ErrorOutline,
+                                    contentDescription = "Error",
+                                    tint = ErrorRed,
+                                    modifier = Modifier.size(64.dp)
+                                )
+                                Text(
+                                    viewModel.errorMessage ?: "Unknown error",
+                                    color = TextPrimary,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                                Button(
+                                    onClick = { viewModel.refresh() },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = GreenAccent
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Retry",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Retry", fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    filteredSorties.isEmpty() -> {
+                        // Empty State
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp),
+                                modifier = Modifier.padding(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.SearchOff,
+                                    contentDescription = "No results",
+                                    tint = TextTertiary,
+                                    modifier = Modifier.size(64.dp)
+                                )
+                                Text(
+                                    "No adventures found",
+                                    color = TextPrimary,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    "Try adjusting your filters or search",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp
+                                )
+                                Button(
+                                    onClick = {
+                                        viewModel.setFilter("explore")
+                                        viewModel.updateSearchQuery("")
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = GreenAccent.copy(alpha = 0.2f),
+                                        contentColor = GreenAccent
+                                    ),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Clear Filters", fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+
+                    else -> {
+                        // Success State - Show List
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Pull to Refresh Indicator
+                            if (viewModel.isLoading) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 8.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(
+                                            color = GreenAccent,
+                                            strokeWidth = 2.dp,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            items(filteredSorties) { sortie ->
+                                ModernEventCard(
+                                    sortie = sortie,
+                                    onClick = {
+                                        navController.navigate("sortieDetail/${sortie.id}")
+                                    }
+                                )
+                            }
+
+                            // Bottom spacing for navbar
+                            item {
+                                Spacer(modifier = Modifier.height(100.dp))
+                            }
+                        }
+                    }
                 }
 
-                // Bottom spacing for navbar
-                item {
-                    Spacer(modifier = Modifier.height(100.dp))
+                // Floating Refresh Button (when content is visible)
+                if (viewModel.sorties.isNotEmpty() && !viewModel.isLoading) {
+                    FloatingActionButton(
+                        onClick = { viewModel.refresh() },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(20.dp)
+                            .padding(bottom = 80.dp),
+                        containerColor = GreenAccent,
+                        contentColor = Color.White
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh"
+                        )
+                    }
                 }
             }
         }
@@ -370,8 +430,70 @@ fun FilterPill(
 }
 
 @Composable
-fun ModernEventCard(event: RideEvent) {
+fun ModernEventCard(
+    sortie: SortieResponse,
+    onClick: () -> Unit
+) {
+    // Helper function to format date
+    fun formatDate(dateString: String): String {
+        return try {
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+            inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+            val date = inputFormat.parse(dateString)
+
+            val outputFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
+            date?.let { outputFormat.format(it) } ?: dateString
+        } catch (e: Exception) {
+            dateString
+        }
+    }
+
+    // Helper function to format time
+    fun formatTime(dateString: String): String {
+        return try {
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+            inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+            val date = inputFormat.parse(dateString)
+
+            val outputFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+            date?.let { outputFormat.format(it) } ?: ""
+        } catch (e: Exception) {
+            ""
+        }
+    }
+
+    // Helper function to get difficulty color
+    fun getDifficultyColor(type: String): Color {
+        return when (type) {
+            "RANDONNEE" -> WarningOrange
+            "VELO" -> TealAccent
+            "CAMPING" -> SuccessGreen
+            else -> TextTertiary
+        }
+    }
+
+    // Helper function to format type
+    fun formatType(type: String): String {
+        return when (type) {
+            "RANDONNEE" -> "Hiking"
+            "VELO" -> "Cycling"
+            "CAMPING" -> "Camping"
+            else -> type
+        }
+    }
+
+    // Helper function to get default image
+    fun getDefaultImage(type: String): Int {
+        return when (type) {
+            "VELO" -> R.drawable.homme
+            "RANDONNEE" -> R.drawable.jbal
+            "CAMPING" -> R.drawable.camping
+            else -> R.drawable.download
+        }
+    }
+
     Surface(
+        onClick = onClick,
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         color = CardGlass,
@@ -396,12 +518,24 @@ fun ModernEventCard(event: RideEvent) {
                     .fillMaxWidth()
                     .height(176.dp)
             ) {
-                Image(
-                    painter = painterResource(id = event.imageRes),
-                    contentDescription = event.title,
-                    contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize()
-                )
+                // Load image from API or use default
+                if (sortie.photo != null && sortie.photo.isNotEmpty()) {
+                    AsyncImage(
+                        model = sortie.photo,
+                        contentDescription = sortie.titre,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                        error = painterResource(id = getDefaultImage(sortie.type)),
+                        placeholder = painterResource(id = getDefaultImage(sortie.type))
+                    )
+                } else {
+                    Image(
+                        painter = painterResource(id = getDefaultImage(sortie.type)),
+                        contentDescription = sortie.titre,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
 
                 // Gradient overlay
                 Box(
@@ -417,25 +551,18 @@ fun ModernEventCard(event: RideEvent) {
                         )
                 )
 
-                // Difficulty Badge
+                // Type Badge
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
                         .padding(12.dp)
                 ) {
-                    val difficultyColor = when (event.difficulty) {
-                        "Easy" -> SuccessGreen
-                        "Medium" -> WarningOrange
-                        "Hard" -> ErrorRed
-                        else -> TextTertiary
-                    }
-
                     Surface(
                         shape = RoundedCornerShape(12.dp),
-                        color = difficultyColor.copy(alpha = 0.9f)
+                        color = getDifficultyColor(sortie.type).copy(alpha = 0.9f)
                     ) {
                         Text(
-                            text = event.difficulty,
+                            text = formatType(sortie.type),
                             color = Color.White,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -444,13 +571,44 @@ fun ModernEventCard(event: RideEvent) {
                     }
                 }
 
+                // Camping Badge (if included)
+                if (sortie.optionCamping) {
+                    Surface(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(12.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = SuccessGreen.copy(alpha = 0.9f),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Terrain,
+                                contentDescription = "Camping",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                text = "Camping",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+
                 // Participants Badge
                 Surface(
                     modifier = Modifier
-                        .align(Alignment.TopStart)
+                        .align(Alignment.BottomEnd)
                         .padding(12.dp),
                     shape = RoundedCornerShape(20.dp),
-                    color = Color.Black.copy(alpha = 0.4f),
+                    color = Color.Black.copy(alpha = 0.6f),
                     border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
                 ) {
                     Row(
@@ -465,9 +623,10 @@ fun ModernEventCard(event: RideEvent) {
                             modifier = Modifier.size(14.dp)
                         )
                         Text(
-                            text = "${event.participants}",
+                            text = "${sortie.participants.size}/${sortie.capacite}",
                             color = TextPrimary,
-                            fontSize = 12.sp
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
                         )
                     }
                 }
@@ -491,27 +650,34 @@ fun ModernEventCard(event: RideEvent) {
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
+                        // Default Avatar with initials
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .border(2.dp, GreenAccent.copy(alpha = 0.5f), CircleShape)
-                                .background(CardDark)
+                                .background(
+                                    Brush.linearGradient(
+                                        colors = listOf(GreenAccent, TealAccent)
+                                    )
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Image(
-                                painter = painterResource(id = event.profileImageRes),
-                                contentDescription = "Profile",
-                                contentScale = ContentScale.Crop,
-                                modifier = Modifier.fillMaxSize()
+                            Text(
+                                text = sortie.createurId.email.take(1).uppercase(),
+                                color = Color.White,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(
-                                text = event.title,
+                                text = sortie.titre,
                                 color = TextPrimary,
                                 fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
                             )
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -524,15 +690,18 @@ fun ModernEventCard(event: RideEvent) {
                                     modifier = Modifier.size(14.dp)
                                 )
                                 Text(
-                                    text = event.location,
+                                    text = sortie.itineraire?.pointArrivee?.address?.takeIf { it.isNotEmpty() }
+                                        ?: sortie.itineraire?.pointArrivee?.displayName?.takeIf { it.isNotEmpty() }
+                                        ?: "Unknown location",
                                     color = TextSecondary,
-                                    fontSize = 13.sp
+                                    fontSize = 13.sp,
+                                    maxLines = 1
                                 )
                             }
                         }
                     }
 
-                    IconButton(onClick = { }) {
+                    IconButton(onClick = { /* TODO: Add to favorites */ }) {
                         Icon(
                             imageVector = Icons.Default.BookmarkBorder,
                             contentDescription = "Bookmark",
@@ -549,42 +718,52 @@ fun ModernEventCard(event: RideEvent) {
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Date
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Schedule,
-                            contentDescription = "Time",
+                            imageVector = Icons.Default.CalendarToday,
+                            contentDescription = "Date",
                             tint = GreenAccent,
                             modifier = Modifier.size(16.dp)
                         )
-                        Text(
-                            text = event.time,
-                            color = TextSecondary,
-                            fontSize = 13.sp
-                        )
+                        Column {
+                            Text(
+                                text = formatDate(sortie.date),
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = formatTime(sortie.date),
+                                color = TextTertiary,
+                                fontSize = 11.sp
+                            )
+                        }
                     }
 
                     Box(
                         modifier = Modifier
                             .width(1.dp)
-                            .height(16.dp)
+                            .height(24.dp)
                             .background(BorderColor)
                     )
 
+                    // Distance
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.CalendarToday,
+                            imageVector = Icons.Default.Route,
                             contentDescription = "Distance",
                             tint = GreenAccent,
                             modifier = Modifier.size(16.dp)
                         )
                         Text(
-                            text = event.distance,
+                            text = "${sortie.itineraire?.distance?.div(1000) ?: 0} km",
                             color = TextSecondary,
                             fontSize = 13.sp
                         )
@@ -592,14 +771,5 @@ fun ModernEventCard(event: RideEvent) {
                 }
             }
         }
-    }
-}
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun HomeExplorePreviewModern() {
-    DamTheme {
-        val navController = rememberNavController()
-        HomeExploreScreen(navController = navController)
     }
 }

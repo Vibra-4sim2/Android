@@ -19,6 +19,7 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
     }
 
     buildTypes {
@@ -42,6 +43,7 @@ android {
 
     buildFeatures {
         compose = true
+
     }
 
     // Plus besoin de composeOptions avec le nouveau plugin
@@ -71,7 +73,7 @@ dependencies {
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
     // Material Icons Extended
-    implementation("androidx.compose.material:material-icons-extended:1.6.2")
+    implementation("androidx.compose.material:material-icons-extended:1.7.0")
 
     // Coil pour charger les images
     implementation("io.coil-kt:coil-compose:2.5.0")
@@ -117,5 +119,19 @@ dependencies {
 
     // JWT Decoder
     implementation("com.auth0.android:jwtdecode:2.0.1")
+
+//maps dependencies
+    implementation ("com.google.maps.android:maps-compose:2.11.2")
+    implementation ("com.google.android.gms:play-services-maps:18.2.0")
+    implementation("io.ktor:ktor-client-core:2.3.5")
+    implementation("io.ktor:ktor-client-cio:2.3.5")
+    implementation("io.ktor:ktor-client-content-negotiation:2.3.5")
+    implementation("io.ktor:ktor-serialization-kotlinx-json:2.3.5")
+
+
+    // Coil for image loading
+    implementation("io.coil-kt:coil-compose:2.5.0")
+
+    
 
 }

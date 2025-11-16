@@ -2,6 +2,8 @@ package com.example.dam
 
 import android.app.Activity
 import android.os.Bundle
+import android.os.StrictMode
+import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -11,18 +13,38 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
-import com.example.dam.Screens.*
+import androidx.navigation.navArgument
+import com.example.dam.Screens.LoginScreen
+
+import com.example.dam.Screens.ProfileScreen
+import com.example.dam.Screens.SplashScreen
+import com.example.dam.Screens.RegisterScreen
+import com.example.dam.Screens.PreferencesOnboardingScreen
+import com.example.dam.Screens.EditProfile2Screen
+import com.example.dam.Screens.EditProfile1Screen
+import com.example.dam.Screens.ForgotPasswordScreen
+import com.example.dam.Screens.ResetPasswordScreen
+import com.example.dam.Screens.CreateAdventureScreen
+import com.example.dam.Screens.OnboardingScreen
+import com.example.dam.Screens.SortieDetailScreen
+
+
 import com.example.dam.ui.theme.DamTheme
 import com.example.dam.ui.theme.TabBarView
 import com.example.dam.viewmodel.ForgotPasswordViewModel
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.google.android.gms.maps.MapsInitializer
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 
 class MainActivity : ComponentActivity() {
@@ -32,7 +54,31 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
+        // ✅ SOLUTION: Utiliser penaltyDeath() ou simplement ne rien faire
+        // Option 1: Politique permissive (ne bloque rien)
+        StrictMode.setThreadPolicy(
+            StrictMode.ThreadPolicy.Builder()
+                .permitDiskReads()
+                .permitDiskWrites()
+                .permitNetwork()
+                .build()
+        )
 
+        StrictMode.setVmPolicy(
+            StrictMode.VmPolicy.Builder()
+                .build()  // ✅ Politique vide = pas de restrictions
+        )
+
+
+
+        // ✅ Pré-initialiser Google Maps
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                MapsInitializer.initialize(applicationContext, MapsInitializer.Renderer.LATEST) { }
+            } catch (e: Exception) {
+                Log.e("MainActivity", "Maps init error: ${e.message}")
+            }
+        }
         // ✅ AJOUT: Configuration Google Sign-In
         val gso = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
             .requestIdToken(getString(R.string.default_web_client_id)) // ton client_id
@@ -139,8 +185,28 @@ fun NavigationGraph(
             TabBarView(navController = navController)
         }
 
-        composable(NavigationRoutes.CREATE) {
-            CreateAdventureScreen(navController = navController)
+        composable(NavigationRoutes.CREATE) { backStackEntry ->
+            val token = backStackEntry.arguments?.getString("token") ?: ""
+            CreateAdventureScreen(
+                navController = navController,
+                token = token
+            )
+        }
+
+        // ✅ NEW: Sortie Detail Screen with ID parameter
+        composable(
+            route = NavigationRoutes.SORTIE_DETAIL,
+            arguments = listOf(
+                navArgument("sortieId") {
+                    type = NavType.StringType
+                }
+            )
+        ) { backStackEntry ->
+            val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
+            SortieDetailScreen(
+                navController = navController,
+                sortieId = sortieId
+            )
         }
     }
 }
@@ -151,8 +217,6 @@ object NavigationRoutes {
     const val FORGOT_PASSWORD = "forgot_password"
     const val RESET_PASSWORD = "reset_password"
     const val HOME = "home"
-    const val CREATE = "createadventure"
-
     const val PROFILE = "profile"
     const val SETTINGS = "settings"
     const val SPLASH = "splash"
@@ -160,6 +224,13 @@ object NavigationRoutes {
     const val PREFERENCES = "preferences"
     const val EDIT_PROFILE = "edit_profile"
     const val EDIT_PROFILE1 = "editProfile1"
+    const val SORTIE_DETAIL = "sortieDetail/{sortieId}"
+
+    // ← NEW: Accept token
+    const val CREATE = "createadventure/{token}"
+
+    // Helper to build route
+    fun createAdventureRoute(token: String) = "createadventure/$token"
 }
 
 @Preview(showBackground = true)

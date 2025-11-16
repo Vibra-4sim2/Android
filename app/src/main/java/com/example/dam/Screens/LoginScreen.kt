@@ -1,3 +1,4 @@
+// screens/LoginScreen.kt
 package com.example.dam.Screens
 
 import android.app.Activity
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.example.dam.NavigationRoutes
 import com.example.dam.R
 import com.example.dam.ui.theme.*
 import com.example.dam.utils.UserPreferences
@@ -69,36 +71,31 @@ fun LoginScreen(
     val googleLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
-        Log.d("LoginScreen", "🔵 Google Sign-In result received: ${result.resultCode}")
-
+        Log.d("LoginScreen", "Google Sign-In result received: ${result.resultCode}")
         if (result.resultCode == Activity.RESULT_OK) {
             val task = GoogleSignIn.getSignedInAccountFromIntent(result.data)
             try {
                 val account = task.getResult(ApiException::class.java)
                 val idToken = account?.idToken
-
-                Log.d("LoginScreen", "✅ Google Account: ${account?.email}")
-                Log.d("LoginScreen", "🎫 ID Token: ${idToken?.take(30)}...")
-
+                Log.d("LoginScreen", "Google Account: ${account?.email}")
+                Log.d("LoginScreen", "ID Token: ${idToken?.take(30)}...")
                 if (idToken != null) {
-                    Log.d("LoginScreen", "📞 Calling viewModel.googleSignIn()")
+                    Log.d("LoginScreen", "Calling viewModel.googleSignIn()")
                     viewModel.googleSignIn(idToken)
                 } else {
-                    Log.e("LoginScreen", "❌ ID Token is null!")
+                    Log.e("LoginScreen", "ID Token is null!")
                 }
             } catch (e: ApiException) {
-                Log.e("LoginScreen", "❌ Google sign in failed: ${e.statusCode} - ${e.message}", e)
+                Log.e("LoginScreen", "Google sign in failed: ${e.statusCode} - ${e.message}", e)
             }
         } else {
-            Log.e("LoginScreen", "❌ Result code: ${result.resultCode}")
+            Log.e("LoginScreen", "Result code: ${result.resultCode}")
         }
     }
-
 
     // Charger les credentials sauvegardés
     LaunchedEffect(Unit) {
         googleSignInClient.signOut()
-
         val savedCredentials = loadSavedCredentials(context)
         if (savedCredentials != null) {
             email = savedCredentials.first
@@ -107,33 +104,30 @@ fun LoginScreen(
         }
     }
 
-    // Navigation après login réussi (VERSION FUSIONNÉE)
+    // Navigation après login réussi (OPTION A – avec token)
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
             val token = viewModel.getAccessToken()
             if (token.isNotEmpty()) {
-                Log.d("LoginScreen", "✅ Login réussi")
+                Log.d("LoginScreen", "Login réussi")
 
                 // ✅ GARDE ton code existant
                 saveAuthData(context, token)
-
-
-                // ✅ AJOUTE la nouvelle ligne pour les préférences
                 UserPreferences.saveToken(context, token)
 
-                // ✅ GARDE ton code remember me
-                if (rememberMe) saveCredentials(context, email, password)
-                else clearSavedCredentials(context)
-
+                if (rememberMe) {
+                    saveCredentials(context, email, password)
+                } else {
+                    clearSavedCredentials(context)
+                }
 
                 val isOnboardingComplete = UserPreferences.isOnboardingComplete(context)
                 Log.d("LoginScreen", "Onboarding complete: $isOnboardingComplete")
 
-            }
-
-            // ✅ GARDE ta navigation vers home
-            navController.navigate("home") {
-                popUpTo("login") { inclusive = true }
+                // ✅ OPTION A: Naviguer vers CreateAdventure avec token
+                navController.navigate(NavigationRoutes.createAdventureRoute(token)) {
+                    popUpTo("login") { inclusive = true }
+                }
             }
         }
     }
@@ -145,7 +139,7 @@ fun LoginScreen(
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.ErrorOutline, null, tint = ErrorRed, modifier = Modifier.size(24.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(Modifier.width(8.dp))
                     Text("Login Failed", fontWeight = FontWeight.Bold)
                 }
             },
@@ -189,13 +183,15 @@ fun LoginScreen(
                 modifier = Modifier.fillMaxSize().blur(1.dp)
             )
             Box(
-                modifier = Modifier.fillMaxSize().background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, BackgroundDark.copy(alpha = 0.7f), BackgroundDark),
-                        startY = 0f,
-                        endY = Float.POSITIVE_INFINITY
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color.Transparent, BackgroundDark.copy(alpha = 0.7f), BackgroundDark),
+                            startY = 0f,
+                            endY = Float.POSITIVE_INFINITY
+                        )
                     )
-                )
             )
         }
 
@@ -228,7 +224,6 @@ fun LoginScreen(
                         colorFilter = ColorFilter.tint(GreenAccent)
                     )
                 }
-
                 Text("V!BRA", color = TextPrimary, fontSize = 32.sp, fontWeight = FontWeight.Bold)
                 Text("Welcome Back", color = TextPrimary, fontSize = 24.sp, fontWeight = FontWeight.SemiBold)
                 Text("Log in to your adventuring account", color = TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
@@ -250,7 +245,6 @@ fun LoginScreen(
                         .padding(24.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-
                         // Email
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             Text("Email", color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.Medium)
@@ -285,7 +279,6 @@ fun LoginScreen(
                                     Text("Remember me", color = if (rememberMe) GreenAccent else TextSecondary, fontSize = 13.sp)
                                 }
                             }
-
                             Text(
                                 text = "Forgot password?",
                                 color = GreenAccent,
@@ -341,8 +334,6 @@ fun LoginScreen(
         }
     }
 }
-
-
 
 // GlassTextField
 @Composable
@@ -409,12 +400,6 @@ fun SocialLoginButton(
     }
 }
 
-
-
-
-
-
-
 // Save, Load, Clear credentials
 private fun saveCredentials(context: Context, email: String, password: String) {
     val sharedPref = context.getSharedPreferences("login_prefs", Context.MODE_PRIVATE)
@@ -465,5 +450,7 @@ private fun extractUserIdFromToken(token: String): String {
             val payload = String(android.util.Base64.decode(parts[1], android.util.Base64.URL_SAFE), Charsets.UTF_8)
             JSONObject(payload).getString("sub")
         } else ""
-    } catch (e: Exception) { "" }
+    } catch (e: Exception) {
+        ""
+    }
 }

@@ -58,8 +58,10 @@ object RetrofitInstance {
         retrofit.create(AuthApiService::class.java)
     }
 
+    val adventureApi: AdventureApi by lazy { retrofit.create(AdventureApi::class.java) }
 
 }
+
 
 /*
 COMMENT CRÉER CE FICHIER :
