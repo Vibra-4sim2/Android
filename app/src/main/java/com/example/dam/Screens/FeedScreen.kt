@@ -1,0 +1,727 @@
+package com.example.dam.Screens
+
+import android.app.Application
+import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
+import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import com.example.dam.models.PublicationResponse
+import com.example.dam.models.fullName
+import com.example.dam.models.hasImage
+import com.example.dam.viewmodel.FeedViewModel
+import com.example.dam.viewmodel.FeedUiState
+import java.text.SimpleDateFormat
+import java.util.*
+
+// ==================== COULEURS ====================
+private val BackgroundDark = Color(0xFF0F0F0F)
+private val CardBackground = Color(0xFF1A1A1A)
+private val GlassBackground = Color(0xFF2A2A2A).copy(alpha = 0.4f)
+private val GreenAccent = Color(0xFF4ADE80)
+private val TextPrimary = Color(0xFFFFFFFF)
+private val TextSecondary = Color(0xFF9CA3AF)
+
+// ==================== SCREEN PRINCIPAL ====================
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun FeedScreen(navController: NavController) {
+    val context = LocalContext.current
+
+    // ✅ ViewModel avec factory
+    val viewModel: FeedViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                @Suppress("UNCHECKED_CAST")
+                return FeedViewModel(context.applicationContext as Application) as T
+            }
+        }
+    )
+
+    val uiState by viewModel.uiState.collectAsState()
+    val publications by viewModel.publications.collectAsState()
+
+    // Pull to refresh avec Material 3
+    val pullToRefreshState = rememberPullToRefreshState()
+
+    LaunchedEffect(pullToRefreshState.isRefreshing) {
+        if (pullToRefreshState.isRefreshing) {
+            viewModel.refreshFeed()
+        }
+    }
+
+    // Arrêter le refresh une fois terminé
+    LaunchedEffect(uiState) {
+        if (uiState !is FeedUiState.Loading && pullToRefreshState.isRefreshing) {
+            pullToRefreshState.endRefresh()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(BackgroundDark)
+            .nestedScroll(pullToRefreshState.nestedScrollConnection)
+    ) {
+        when (uiState) {
+            is FeedUiState.Loading -> {
+                if (publications.isEmpty()) {
+                    LoadingState()
+                } else {
+                    // Afficher les publications pendant le refresh
+                    FeedContent(
+                        publications = publications,
+                        viewModel = viewModel,
+                        navController = navController
+                    )
+                }
+            }
+
+            is FeedUiState.Success -> {
+                FeedContent(
+                    publications = publications,
+                    viewModel = viewModel,
+                    navController = navController
+                )
+            }
+
+            is FeedUiState.Empty -> {
+                EmptyState(navController = navController)
+            }
+
+            is FeedUiState.Error -> {
+                ErrorState(
+                    message = (uiState as FeedUiState.Error).message,
+                    onRetry = { viewModel.refreshFeed() }
+                )
+            }
+        }
+
+        // Pull to refresh indicator Material 3
+        PullToRefreshContainer(
+            state = pullToRefreshState,
+            modifier = Modifier.align(Alignment.TopCenter),
+            containerColor = Color(0xFF1A1A1A),
+            contentColor = GreenAccent
+        )
+    }
+}
+
+// ==================== CONTENU DU FEED ====================
+@Composable
+private fun FeedContent(
+    publications: List<PublicationResponse>,
+    viewModel: FeedViewModel,
+    navController: NavController
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(bottom = 80.dp),
+        contentPadding = PaddingValues(vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // En-tête avec bouton "What's on your mind?"
+        item {
+            FeedHeader(navController = navController)
+        }
+
+        // Liste des publications
+        items(
+            items = publications,
+            key = { it.id }
+        ) { publication ->
+            PostCard(
+                publication = publication,
+                isLiked = viewModel.isLikedByCurrentUser(publication),
+                onLikeClick = { viewModel.toggleLike(publication.id) },
+                onCommentClick = { /* TODO: Navigation vers les commentaires */ },
+                onShareClick = { /* TODO: Partage */ },
+                onMenuClick = { /* TODO: Menu options */ }
+            )
+        }
+    }
+}
+
+// ==================== HEADER DU FEED ====================
+@Composable
+fun FeedHeader(navController: NavController) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = GlassBackground,
+        shadowElevation = 4.dp
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFF1A1A1A).copy(alpha = 0.6f),
+                            Color(0xFF2A2A2A).copy(alpha = 0.4f)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.1f),
+                    shape = RoundedCornerShape(20.dp)
+                )
+                .padding(20.dp)
+        ) {
+            Column {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Recent Activity Feed",
+                            color = TextPrimary,
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+//                        Text(
+//                            text = "Stay connected with your community",
+//                            color = TextSecondary,
+//                            fontSize = 13.sp
+//                        )
+                    }
+
+                    Icon(
+                        imageVector = Icons.Outlined.FilterList,
+                        contentDescription = "Filter",
+                        tint = TextSecondary,
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clickable { /* TODO: Filter action */ }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Bouton "What's on your mind?"
+                Surface(
+                    onClick = { navController.navigate("addpublication") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = CardBackground,
+                    shadowElevation = 2.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Surface(
+                            modifier = Modifier.size(40.dp),
+                            shape = CircleShape,
+                            color = Color.Gray.copy(alpha = 0.3f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.Person,
+                                contentDescription = "User",
+                                tint = TextSecondary,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+
+                        Text(
+                            text = "What's on your mind?",
+                            color = TextSecondary,
+                            fontSize = 15.sp,
+                            modifier = Modifier.weight(1f)
+                        )
+
+                        Surface(
+                            modifier = Modifier.size(36.dp),
+                            shape = CircleShape,
+                            color = GreenAccent.copy(alpha = 0.15f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Image,
+                                contentDescription = "Add image",
+                                tint = GreenAccent,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ==================== CARD DE PUBLICATION ====================
+@Composable
+fun PostCard(
+    publication: PublicationResponse,
+    isLiked: Boolean = false,
+    onLikeClick: () -> Unit = {},
+    onCommentClick: () -> Unit = {},
+    onShareClick: () -> Unit = {},
+    onMenuClick: () -> Unit = {}
+) {
+    var localIsLiked by remember { mutableStateOf(isLiked) }
+    var localLikesCount by remember { mutableStateOf(publication.likesCount) }
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        shape = RoundedCornerShape(24.dp),
+        color = CardBackground,
+        shadowElevation = 8.dp
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF1A1A1A),
+                            Color(0xFF151515)
+                        )
+                    )
+                )
+                .border(
+                    width = 1.dp,
+                    color = Color.White.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(24.dp)
+                )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp)
+            ) {
+                // ========== HEADER ==========
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        // Avatar
+                        Box(
+                            modifier = Modifier
+                                .size(50.dp)
+                                .border(2.dp, GreenAccent.copy(alpha = 0.3f), CircleShape)
+                                .padding(3.dp)
+                        ) {
+                            if (publication.author?.avatar.isNullOrEmpty()) {
+                                // Placeholder avec initiales
+                                Surface(
+                                    modifier = Modifier.fillMaxSize(),
+                                    shape = CircleShape,
+                                    color = Color(0xFF374151)
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        Text(
+                                            text = publication.author?.let {
+                                                "${it.firstName.firstOrNull() ?: ""}${it.lastName.firstOrNull() ?: ""}"
+                                            } ?: "?",
+                                            color = GreenAccent,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            } else {
+                                AsyncImage(
+                                    model = publication.author?.avatar,
+                                    contentDescription = "Avatar",
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.width(12.dp))
+
+                        Column {
+                            Text(
+                                text = publication.author?.fullName() ?: "Unknown User",
+                                color = TextPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = formatTimestamp(publication.createdAt),
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+
+                    IconButton(onClick = onMenuClick) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "More",
+                            tint = TextSecondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ========== CONTENU ==========
+                Text(
+                    text = publication.content,
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
+
+                // ========== IMAGE ==========
+                if (publication.hasImage()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(220.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = Color.Gray.copy(alpha = 0.2f)
+                    ) {
+                        AsyncImage(
+                            model = publication.image,
+                            contentDescription = "Post image",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+
+                // ========== TAGS ==========
+                if (!publication.tags.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        publication.tags.take(3).forEach { tag ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = GreenAccent.copy(alpha = 0.15f)
+                            ) {
+                                Text(
+                                    text = "#$tag",
+                                    color = GreenAccent,
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // ========== LOCATION ==========
+                if (!publication.location.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.LocationOn,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = publication.location,
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // ========== STATISTIQUES ==========
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Favorite,
+                            contentDescription = null,
+                            tint = if (localIsLiked) GreenAccent else TextSecondary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = formatNumber(localLikesCount),
+                            color = TextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
+
+                    Text(
+                        text = "${publication.commentsCount} comments • ${publication.sharesCount} shares",
+                        color = TextSecondary,
+                        fontSize = 13.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                HorizontalDivider(
+                    color = Color.White.copy(alpha = 0.1f),
+                    thickness = 1.dp
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // ========== BOUTONS D'INTERACTION ==========
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    InteractionButton(
+                        icon = if (localIsLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                        label = "Like",
+                        tint = if (localIsLiked) GreenAccent else TextSecondary,
+                        onClick = {
+                            localIsLiked = !localIsLiked
+                            localLikesCount += if (localIsLiked) 1 else -1
+                            onLikeClick()
+                        }
+                    )
+
+                    InteractionButton(
+                        icon = Icons.Outlined.ChatBubbleOutline,
+                        label = "Comment",
+                        tint = TextSecondary,
+                        onClick = onCommentClick
+                    )
+
+                    InteractionButton(
+                        icon = Icons.Outlined.Share,
+                        label = "Share",
+                        tint = TextSecondary,
+                        onClick = onShareClick
+                    )
+                }
+            }
+        }
+    }
+}
+
+// ==================== BOUTON D'INTERACTION ====================
+@Composable
+private fun InteractionButton(
+    icon: ImageVector,
+    label: String,
+    tint: Color,
+    onClick: () -> Unit
+) {
+    TextButton(
+        onClick = onClick,
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = tint
+        )
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+// ==================== ÉTATS ====================
+@Composable
+private fun LoadingState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            CircularProgressIndicator(
+                color = GreenAccent,
+                modifier = Modifier.size(48.dp)
+            )
+            Text(
+                text = "Loading publications...",
+                color = TextSecondary,
+                fontSize = 14.sp
+            )
+        }
+    }
+}
+
+@Composable
+private fun EmptyState(navController: NavController) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Text(
+                text = "🚴",
+                fontSize = 64.sp
+            )
+            Text(
+                text = "No publications yet",
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = "Be the first to share your cycling journey!",
+                color = TextSecondary,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { navController.navigate("addpublication") },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GreenAccent
+                )
+            ) {
+                Icon(imageVector = Icons.Default.Add, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("Create Post")
+            }
+        }
+    }
+}
+
+@Composable
+private fun ErrorState(
+    message: String,
+    onRetry: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Text(
+                text = "❌",
+                fontSize = 64.sp
+            )
+            Text(
+                text = "Oops! Something went wrong",
+                color = TextPrimary,
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = message,
+                color = TextSecondary,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = onRetry,
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = GreenAccent
+                )
+            ) {
+                Text("Retry")
+            }
+        }
+    }
+}
+
+// ==================== HELPERS ====================
+private fun formatNumber(count: Int): String {
+    return when {
+        count >= 1_000_000 -> "${count / 1_000_000}M"
+        count >= 1_000 -> "${count / 1_000}K"
+        else -> count.toString()
+    }
+}
+
+private fun formatTimestamp(timestamp: String): String {
+    return try {
+        val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        format.timeZone = TimeZone.getTimeZone("UTC")
+        val date = format.parse(timestamp)
+
+        if (date != null) {
+            val diff = System.currentTimeMillis() - date.time
+            val seconds = diff / 1000
+            val minutes = seconds / 60
+            val hours = minutes / 60
+            val days = hours / 24
+
+            when {
+                days > 30 -> "${days / 30} month${if (days / 30 > 1) "s" else ""} ago"
+                days > 0 -> "$days day${if (days > 1) "s" else ""} ago"
+                hours > 0 -> "$hours hour${if (hours > 1) "s" else ""} ago"
+                minutes > 0 -> "$minutes min${if (minutes > 1) "s" else ""} ago"
+                else -> "Just now"
+            }
+        } else {
+            "Recently"
+        }
+    } catch (e: Exception) {
+        "Recently"
+    }
+}
