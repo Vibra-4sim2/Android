@@ -23,62 +23,74 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import com.example.dam.R
-import com.example.dam.ui.theme.*
 import com.example.dam.viewmodel.UserViewModel
+
+// Colors - Make sure these match your theme
+private val BackgroundDark = Color(0xFF0F0F0F)
+private val TextPrimary = Color(0xFFFFFFFF)
+private val TextSecondary = Color(0xFF9CA3AF)
+private val GreenAccent = Color(0xFF4ADE80)
 
 @Composable
 fun ProfileScreen(
     navController: NavHostController,
     showDropdown: Boolean = false,
-    viewModel: UserViewModel = viewModel()  // ✅ Add ViewModel
+    viewModel: UserViewModel = viewModel()
 ) {
     val context = LocalContext.current
 
-    // ✅ Get stored auth data
+    // Get stored auth data
     val sharedPref = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
     val token = sharedPref.getString("access_token", "") ?: ""
     val userId = sharedPref.getString("user_id", "") ?: ""
 
-    // ✅ Observe user data from ViewModel
+    // Observe user data from ViewModel
     val currentUser by viewModel.currentUser.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
-    // ✅ Load user data when screen opens
+    // Load user data when screen opens
     LaunchedEffect(Unit) {
         if (userId.isNotEmpty() && token.isNotEmpty()) {
             viewModel.loadUserProfile(userId, token)
         }
     }
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundDark)
-            .verticalScroll(rememberScrollState())
     ) {
-        // ✅ Pass user data to ProfileHeader
-        ProfileHeader(
-            navController = navController,
-            userName = currentUser?.let { "${it.firstName} ${it.lastName}" } ?: "Loading...",
-            userEmail = currentUser?.email ?: "",
-            isLoading = isLoading
-        )
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 64.dp) // ✅ Space for top bar
+                .verticalScroll(rememberScrollState())
+                .padding(bottom = 96.dp) // ✅ Space for bottom nav bar
+        ) {
+            // Pass user data to ProfileHeader
+            ProfileHeader(
+                navController = navController,
+                userName = currentUser?.let { "${it.firstName} ${it.lastName}" } ?: "Loading...",
+                userEmail = currentUser?.email ?: "",
+                isLoading = isLoading
+            )
 
-        Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-        // Statistiques
-        StatisticsSection()
+            // Statistiques
+            StatisticsSection()
 
-        Spacer(modifier = Modifier.height(100.dp))
+            Spacer(modifier = Modifier.height(24.dp))
+        }
     }
 }
 
 @Composable
 fun ProfileHeader(
     navController: NavHostController,
-    userName: String,  // ✅ Receive user name
-    userEmail: String,  // ✅ Receive user email
-    isLoading: Boolean  // ✅ Receive loading state
+    userName: String,
+    userEmail: String,
+    isLoading: Boolean
 ) {
     Column(
         modifier = Modifier
@@ -102,7 +114,7 @@ fun ProfileHeader(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ✅ Display actual user name with loading state
+        // Display actual user name with loading state
         if (isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(24.dp),
@@ -111,7 +123,7 @@ fun ProfileHeader(
             )
         } else {
             Text(
-                text = userName,  // ✅ Display dynamic user name
+                text = userName,
                 color = TextPrimary,
                 fontSize = 24.sp,
                 fontWeight = FontWeight.Bold
@@ -120,7 +132,7 @@ fun ProfileHeader(
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // ✅ Display user email (optional)
+        // Display user email
         if (!isLoading && userEmail.isNotEmpty()) {
             Text(
                 text = userEmail,
@@ -194,7 +206,7 @@ fun ProfileHeader(
             ),
             shape = RoundedCornerShape(8.dp),
             modifier = Modifier.height(44.dp),
-            enabled = !isLoading  // ✅ Disable during loading
+            enabled = !isLoading
         ) {
             Icon(
                 painter = painterResource(id = android.R.drawable.ic_menu_edit),

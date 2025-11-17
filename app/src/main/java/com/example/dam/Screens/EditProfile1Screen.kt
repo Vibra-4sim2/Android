@@ -11,6 +11,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,10 +27,10 @@ import androidx.navigation.NavHostController
 import com.example.dam.viewmodel.UserViewModel
 
 // Colors
-private val BackgroundColor = Color(0xFF0B0B0B)
+private val BackgroundColor = Color(0xFF0F0F0F)
 private val SecondaryTextColor = Color(0xFFBDBDBD)
 private val PrimaryTextColor = Color.White
-private val AccentGreen = Color(0xFF36C36A)
+private val AccentGreen = Color(0xFF4ADE80)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -76,7 +77,6 @@ fun EditProfile1Screen(navController: NavHostController) {
     // Show error message if any
     LaunchedEffect(errorMessage) {
         errorMessage?.let { error ->
-            // You can show a snackbar or toast here
             println("Error loading user data: $error")
         }
     }
@@ -85,24 +85,30 @@ fun EditProfile1Screen(navController: NavHostController) {
         modifier = Modifier
             .fillMaxSize()
             .background(BackgroundColor)
-            .imePadding() // ✅ Adjusts for keyboard
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(top = 64.dp) // ✅ Space for top bar
                 .verticalScroll(scrollState)
                 .padding(horizontal = 22.dp)
-                .padding(top = 22.dp, bottom = 100.dp) // ✅ Extra bottom padding
+                .padding(bottom = 120.dp) // ✅ Space for bottom nav bar
+                .imePadding() // ✅ Adjusts for keyboard
         ) {
-            // Back Button
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Close Button
             IconButton(
-                onClick = {  navController.navigate("profile") {
-                }},
+                onClick = {
+                    navController.navigate("profile") {
+                        popUpTo("profile") { inclusive = true }
+                    }
+                },
                 modifier = Modifier.padding(bottom = 16.dp)
             ) {
                 Icon(
-                    imageVector = Icons.Default.ArrowBack,
-                    contentDescription = "Back",
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Close",
                     tint = Color.White
                 )
             }
@@ -202,7 +208,6 @@ fun EditProfile1Screen(navController: NavHostController) {
                             shape = CircleShape
                         )
                         .clickable(
-
                             enabled = !isLoading
                         ) {
                             // Update user profile with new data
@@ -214,17 +219,15 @@ fun EditProfile1Screen(navController: NavHostController) {
                                 gender = gender,
                                 email = email,
                                 onSuccess = {
-                                    // Navigate back or show success message
-                                    navController.navigate("profile") {}                                },
+                                    navController.navigate("profile") {}
+                                },
                                 onError = { error ->
-                                    // Show error message
                                     println("Update failed: $error")
                                 }
                             )
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    // FIXED: Use the collected isLoading state instead of .value
                     if (isLoading) {
                         CircularProgressIndicator(
                             color = Color.White,

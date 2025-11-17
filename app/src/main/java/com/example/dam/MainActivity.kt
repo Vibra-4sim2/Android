@@ -21,7 +21,6 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import com.example.dam.Screens.LoginScreen
 
 import com.example.dam.Screens.ProfileScreen
 import com.example.dam.Screens.SplashScreen
@@ -31,11 +30,12 @@ import com.example.dam.Screens.EditProfile2Screen
 import com.example.dam.Screens.EditProfile1Screen
 import com.example.dam.Screens.ForgotPasswordScreen
 import com.example.dam.Screens.ResetPasswordScreen
-import com.example.dam.Screens.CreateAdventureScreen
 import com.example.dam.Screens.OnboardingScreen
 import com.example.dam.Screens.SortieDetailScreen
 
 
+import com.example.dam.Screens.*
+import com.example.dam.Screens.FeedScreen
 import com.example.dam.ui.theme.DamTheme
 import com.example.dam.ui.theme.TabBarView
 import com.example.dam.viewmodel.ForgotPasswordViewModel
@@ -181,6 +181,15 @@ fun NavigationGraph(
             EditProfile2Screen(navController = navController)
         }
 
+        composable(NavigationRoutes.FEED) {
+            FeedScreen(navController = navController)
+        }
+
+        composable(NavigationRoutes.ADD_PUB) {
+            AddPublicationScreen(navController = navController)
+        }
+
+
         composable(NavigationRoutes.HOME) {
             TabBarView(navController = navController)
         }
@@ -224,6 +233,8 @@ object NavigationRoutes {
     const val PREFERENCES = "preferences"
     const val EDIT_PROFILE = "edit_profile"
     const val EDIT_PROFILE1 = "editProfile1"
+    const val FEED = "feed"
+    const val ADD_PUB = "addpublication"
     const val SORTIE_DETAIL = "sortieDetail/{sortieId}"
 
     // ← NEW: Accept token

@@ -1,6 +1,5 @@
 package com.example.dam.remote
 
-
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
@@ -60,6 +59,12 @@ object RetrofitInstance {
 
     val adventureApi: AdventureApi by lazy { retrofit.create(AdventureApi::class.java) }
 
+    /**
+     * Instance de l'API des publications
+     */
+    val publicationApi: PublicationApiService by lazy {
+        retrofit.create(PublicationApiService::class.java)
+    }
 }
 
 

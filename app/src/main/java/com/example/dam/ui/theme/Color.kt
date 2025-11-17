@@ -69,3 +69,6 @@ val ShadowColor = Color(0x80000000)  // Black with 50% opacity
 // Special effects
 val GlowGreen = Color(0x997FDB8A)  // Green glow effect
 val ShimmerLight = Color(0x33FFFFFF)  // Shimmer effect
+
+
+

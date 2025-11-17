@@ -26,20 +26,44 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import com.example.dam.Screens.AddPublicationScreen
 import com.example.dam.Screens.HomeExploreScreen
 import com.example.dam.Screens.ProfileScreen
 import com.example.dam.Screens.CreateAdventureScreen
+import com.example.dam.Screens.FeedScreen
+import com.example.dam.Screens.EditProfile1Screen
 import com.example.dam.utils.UserPreferences
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
 fun TabBarView(navController: NavHostController) {
-    val context = LocalContext.current  // ✅ AJOUTÉ
+    val context = LocalContext.current
     var showOptions by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
+    // Create internal nav controller for screens within TabBar
+    val internalNavController = rememberNavController()
+    val navBackStackEntry by internalNavController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
     val tabs = listOf("Home", "Map", "Add", "Community", "Profile")
     var selectedTab by remember { mutableStateOf(0) }
+
+    // Update selected tab based on current route
+    LaunchedEffect(currentRoute) {
+        selectedTab = when (currentRoute) {
+            "home" -> 0
+            "map" -> 1
+            "add" -> 2
+            "feed" -> 3
+            "profile" -> 4
+            else -> selectedTab
+        }
+    }
 
     val rotation by animateFloatAsState(
         targetValue = if (showOptions) 180f else 0f,
@@ -49,6 +73,9 @@ fun TabBarView(navController: NavHostController) {
         ),
         label = "rotation"
     )
+
+    // Check if we should show bars (hide on edit profile, add publication, etc.)
+    val shouldShowBars = currentRoute !in listOf("edit_profile", "addpublication")
 
     Box(
         modifier = Modifier
@@ -65,137 +92,188 @@ fun TabBarView(navController: NavHostController) {
     ) {
         // Main Content
         Column(modifier = Modifier.fillMaxSize()) {
-            Spacer(modifier = Modifier.height(60.dp))
+            // Top Bar
+            if (shouldShowBars) {
+                Spacer(modifier = Modifier.height(60.dp))
+            }
 
-            // Content Area
+            // Content Area with Navigation
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
             ) {
-                when (selectedTab) {
-                    0 -> HomeExploreScreen(navController = navController)
-                    1 -> ScreenPlaceholder("Map View")
-                    2 -> {
-                        // GET TOKEN
+                NavHost(
+                    navController = internalNavController,
+                    startDestination = "home"
+                ) {
+                    composable("home") {
+                        HomeExploreScreen(navController = internalNavController)
+                    }
+                    composable("map") {
+                        ScreenPlaceholder("Map View")
+                    }
+                    composable("add") {
                         val token = UserPreferences.getToken(context) ?: ""
                         CreateAdventureScreen(
-                            navController = navController,
-                            token = token  // PASSED HERE
+                            navController = internalNavController,
+                            token = token
                         )
-                    }                    3 -> ScreenPlaceholder("Community View")
-                    4 -> ProfileScreen(navController = navController)
+                    }
+                    composable("feed") {
+                        FeedScreen(navController = internalNavController)
+                    }
+                    composable("profile") {
+                        ProfileScreen(navController = internalNavController)
+                    }
+                    composable("edit_profile") {
+                        EditProfile1Screen(navController = internalNavController)
+                    }
+                    composable("addpublication") {
+                        AddPublicationScreen(navController = internalNavController)
+                    }
                 }
             }
         }
 
         // Top Bar with Dropdown
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-        ) {
-            // Top Bar - Glass Design
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = BackgroundGradientStart
+        if (shouldShowBars) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    CardDark.copy(alpha = 0.8f),
-                                    CardDark.copy(alpha = 0.6f)
+                // Top Bar - Glass Design
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = BackgroundGradientStart
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        CardDark.copy(alpha = 0.8f),
+                                        CardDark.copy(alpha = 0.6f)
+                                    )
                                 )
                             )
-                        )
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 12.dp, bottom = 14.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = "V!BRA",
-                            fontSize = 24.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = TextPrimary,
-                            letterSpacing = 1.sp
-                        )
-                        Text(
-                            text = "Explore Adventures",
-                            fontSize = 12.sp,
-                            color = GreenAccent.copy(alpha = 0.7f)
-                        )
-                    }
-
-                    Surface(
-                        onClick = { showOptions = !showOptions },
-                        shape = CircleShape,
-                        color = BackgroundDark,
-                        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                        modifier = Modifier.size(40.dp)
+                            .padding(horizontal = 20.dp)
+                            .padding(top = 12.dp, bottom = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(CardDark.copy(alpha = 0.5f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowDown,
-                                contentDescription = "Menu",
-                                tint = GreenAccent,
-                                modifier = Modifier
-                                    .size(24.dp)
-                                    .rotate(rotation)
+                        Column {
+                            Text(
+                                text = "V!BRA",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = TextPrimary,
+                                letterSpacing = 1.sp
                             )
+                            Text(
+                                text = "Explore Adventures",
+                                fontSize = 12.sp,
+                                color = GreenAccent.copy(alpha = 0.7f)
+                            )
+                        }
+
+                        Surface(
+                            onClick = { showOptions = !showOptions },
+                            shape = CircleShape,
+                            color = BackgroundDark,
+                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                            modifier = Modifier.size(40.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(CardDark.copy(alpha = 0.5f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowDown,
+                                    contentDescription = "Menu",
+                                    tint = GreenAccent,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .rotate(rotation)
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // Dropdown Menu
-            AnimatedVisibility(
-                visible = showOptions,
-                enter = slideInVertically(
-                    initialOffsetY = { -it },
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
-                ) + fadeIn(),
-                exit = slideOutVertically(
-                    targetOffsetY = { -it },
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    )
-                ) + fadeOut()
-            ) {
-                GlassDropdownMenu(onLogout = { showLogoutDialog = true })
+                // Dropdown Menu
+                AnimatedVisibility(
+                    visible = showOptions,
+                    enter = slideInVertically(
+                        initialOffsetY = { -it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeIn(),
+                    exit = slideOutVertically(
+                        targetOffsetY = { -it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeOut()
+                ) {
+                    GlassDropdownMenu(onLogout = { showLogoutDialog = true })
+                }
             }
         }
 
         // Glass Bottom Navigation Bar
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .padding(horizontal = 20.dp, vertical = 12.dp)
-        ) {
-            GlassBottomNav(
-                tabs = tabs,
-                selectedIndex = selectedTab,
-                onTabSelected = { selectedTab = it }
-            )
+        if (shouldShowBars) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                GlassBottomNav(
+                    tabs = tabs,
+                    selectedIndex = selectedTab,
+                    onTabSelected = { index ->
+                        selectedTab = index
+                        when (index) {
+                            0 -> internalNavController.navigate("home") {
+                                popUpTo("home") { inclusive = true }
+                            }
+                            1 -> internalNavController.navigate("map") {
+                                popUpTo("home") { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                            2 -> internalNavController.navigate("add") {
+                                popUpTo("home") { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                            3 -> internalNavController.navigate("feed") {
+                                popUpTo("home") { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                            4 -> internalNavController.navigate("profile") {
+                                popUpTo("home") { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        }
+                    }
+                )
+            }
         }
     }
 
-    // ✅ MODIFIÉ - Logout Dialog
+    // Logout Dialog
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -216,11 +294,9 @@ fun TabBarView(navController: NavHostController) {
             confirmButton = {
                 Button(
                     onClick = {
-                        // ✅ NOUVEAU CODE DE LOGOUT
                         Log.d("TabBarView", "========== LOGOUT ==========")
                         Log.d("TabBarView", "Token avant: ${UserPreferences.getToken(context)?.take(20)}")
 
-                        // Supprimer les données utilisateur
                         UserPreferences.clear(context)
 
                         Log.d("TabBarView", "Token après: ${UserPreferences.getToken(context)}")
@@ -228,7 +304,6 @@ fun TabBarView(navController: NavHostController) {
 
                         showLogoutDialog = false
 
-                        // Rediriger vers Login et vider tout le backstack
                         navController.navigate("login") {
                             popUpTo(0) { inclusive = true }
                         }
@@ -250,9 +325,6 @@ fun TabBarView(navController: NavHostController) {
         )
     }
 }
-
-
-
 
 @Composable
 fun GlassDropdownMenu(onLogout: () -> Unit) {
