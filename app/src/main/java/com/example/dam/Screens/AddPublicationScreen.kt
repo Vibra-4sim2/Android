@@ -30,11 +30,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import com.example.dam.ui.theme.CardDark
+import com.example.dam.ui.theme.SuccessGreen
 import com.example.dam.viewmodel.AddPublicationViewModel
 import com.example.dam.viewmodel.AddPublicationUiState
 
@@ -44,6 +47,8 @@ private val CardBackground = Color(0xFF1A1A1A)
 private val GreenAccent = Color(0xFF4ADE80)
 private val TextPrimary = Color(0xFFFFFFFF)
 private val TextSecondary = Color(0xFF9CA3AF)
+private val TextTertiary = Color(0xFF6B7280)   // 👈 AJOUTER
+
 private val RedAccent = Color(0xFFEF4444)
 
 // ==================== UI PRINCIPALE ====================
@@ -51,6 +56,8 @@ private val RedAccent = Color(0xFFEF4444)
 @Composable
 fun AddPublicationScreen(navController: NavHostController) {
     val context = LocalContext.current
+    var showSuccessDialog by remember { mutableStateOf(false) }
+
 
     // ✅ UTILISE LE BON VIEWMODEL (celui avec UserPreferences)
     val viewModel: AddPublicationViewModel = viewModel(
@@ -73,6 +80,14 @@ fun AddPublicationScreen(navController: NavHostController) {
 
     var showMentionDialog by remember { mutableStateOf(false) }
     var showTagDialog by remember { mutableStateOf(false) }
+
+
+    // Observe the UI state for success
+    LaunchedEffect(uiState) {
+        if (uiState is AddPublicationUiState.Success) {
+            showSuccessDialog = true
+        }
+    }
 
     // Gérer les états de succès/erreur
     LaunchedEffect(uiState) {
@@ -383,6 +398,96 @@ fun AddPublicationScreen(navController: NavHostController) {
                         )
                     }
                 }
+            }
+            // Success Dialog - Add this at the bottom of your composable, before the closing }
+            if (showSuccessDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showSuccessDialog = false
+                        navController.navigate("feed") {
+                            popUpTo("addpublication") { inclusive = true }
+                        }
+                    },
+                    icon = {
+                        Box(
+                            modifier = Modifier
+                                .size(80.dp)
+                                .background(
+                                    Brush.radialGradient(
+                                        colors = listOf(
+                                            SuccessGreen.copy(alpha = 0.3f),
+                                            Color.Transparent
+                                        )
+                                    ),
+                                    shape = CircleShape
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = SuccessGreen,
+                                modifier = Modifier.size(48.dp)
+                            )
+                        }
+                    },
+                    title = {
+                        Text(
+                            text = "Published Successfully!",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 20.sp,
+                            color = TextPrimary,
+                            textAlign = TextAlign.Center
+                        )
+                    },
+                    text = {
+                        Text(
+                            text = "Your post has been shared with the community. Check it out in your feed!",
+                            color = TextSecondary,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            lineHeight = 20.sp
+                        )
+                    },
+                    confirmButton = {
+                        Button(
+                            onClick = {
+                                showSuccessDialog = false
+                                navController.navigate("feed") {
+                                    popUpTo("addpublication") { inclusive = true }
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("View in Feed", fontWeight = FontWeight.Bold)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Icon(
+                                    imageVector = Icons.Default.ArrowForward,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(
+                            onClick = {
+                                showSuccessDialog = false
+                                navController.popBackStack()
+                            }
+                        ) {
+                            Text("Stay Here", color = TextTertiary)
+                        }
+                    },
+                    containerColor = CardDark,
+                    shape = RoundedCornerShape(24.dp)
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))

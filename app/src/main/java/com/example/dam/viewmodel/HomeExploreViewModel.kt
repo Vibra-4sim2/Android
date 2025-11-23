@@ -58,7 +58,7 @@ class HomeExploreViewModel : ViewModel() {
         filtered = when (selectedFilter) {
             "cycling" -> filtered.filter { it.type == "VELO" }
             "hiking" -> filtered.filter { it.type == "RANDONNEE" }
-            "camping" -> filtered.filter { it.type == "CAMPING" }
+            "camping" -> filtered.filter { it.optionCamping == true }  // ✅ MODIFIÉ : filtre par option camping
             else -> filtered
         }
 

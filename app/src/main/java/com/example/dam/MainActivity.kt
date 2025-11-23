@@ -173,6 +173,21 @@ fun NavigationGraph(
             ProfileScreen(navController = navController)
         }
 
+
+        // User Profile Screen Route
+        composable(
+            "userProfile/{userId}",
+            arguments = listOf(navArgument("userId") { type = NavType.StringType })
+        ) {
+            UserProfileScreen(
+                navController = navController,
+                userId = it.arguments?.getString("userId")!!
+            )
+        }
+
+
+
+
         composable(NavigationRoutes.EDIT_PROFILE) {
             EditProfile1Screen(navController = navController)
         }
@@ -204,7 +219,7 @@ fun NavigationGraph(
 
         // ✅ NEW: Sortie Detail Screen with ID parameter
         composable(
-            route = NavigationRoutes.SORTIE_DETAIL,
+            route = "sortieDetail/{sortieId}",
             arguments = listOf(
                 navArgument("sortieId") {
                     type = NavType.StringType
@@ -217,6 +232,46 @@ fun NavigationGraph(
                 sortieId = sortieId
             )
         }
+
+
+
+        // ✅ AJOUTÉ: Route pour la liste des messages
+        composable(NavigationRoutes.MESSAGES) {
+            MessagesListScreen(navController = navController)
+        }
+
+        // ✅ AJOUTÉ: Route pour la conversation de chat
+        // ✅ CORRECTION: Route pour la conversation de chat avec décodage
+        composable(
+            route = "chatConversation/{sortieId}/{groupName}/{groupEmoji}/{participantsCount}",
+            arguments = listOf(
+                navArgument("sortieId") { type = NavType.StringType },
+                navArgument("groupName") { type = NavType.StringType },
+                navArgument("groupEmoji") { type = NavType.StringType },
+                navArgument("participantsCount") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
+            val encodedGroupName = backStackEntry.arguments?.getString("groupName") ?: ""
+            val encodedEmoji = backStackEntry.arguments?.getString("groupEmoji") ?: ""
+            val participantsCount = backStackEntry.arguments?.getString("participantsCount") ?: ""
+
+            // Décoder les paramètres qui contiennent des caractères spéciaux
+            val groupName = java.net.URLDecoder.decode(encodedGroupName, "UTF-8")
+            val groupEmoji = java.net.URLDecoder.decode(encodedEmoji, "UTF-8")
+
+            ChatConversationScreen(
+                navController = navController,
+                groupId = sortieId, // ✅ C'est le sortieId maintenant
+                groupName = groupName,
+                groupEmoji = groupEmoji,
+                participantsCount = participantsCount
+            )
+        }
+
+
+
+
     }
 }
 // ✅ Routes mises à jour
@@ -236,12 +291,22 @@ object NavigationRoutes {
     const val FEED = "feed"
     const val ADD_PUB = "addpublication"
     const val SORTIE_DETAIL = "sortieDetail/{sortieId}"
-
-    // ← NEW: Accept token
     const val CREATE = "createadventure/{token}"
+    const val USER_PROFILE = "userProfile/{userId}"
+    const val MESSAGES = "messages"  // ✅ AJOUTÉ
 
-    // Helper to build route
+
+    // Helper functions
     fun createAdventureRoute(token: String) = "createadventure/$token"
+    fun userProfileRoute(userId: String) = "userProfile/$userId"
+    fun sortieDetailRoute(sortieId: String) = "sortieDetail/$sortieId"
+    // ✅ AJOUTÉ
+    fun chatConversationRoute(
+        groupId: String,
+        groupName: String,
+        groupEmoji: String,
+        participantsCount: String
+    ) = "chatConversation/$groupId/$groupName/$groupEmoji/$participantsCount"
 }
 
 @Preview(showBackground = true)

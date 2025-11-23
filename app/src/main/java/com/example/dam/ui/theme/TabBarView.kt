@@ -1,3 +1,6 @@
+// ========== MISE À JOUR 1: TabBarView.kt ==========
+// Remplacez votre TabBarView.kt par ce code:
+
 package com.example.dam.ui.theme
 
 import android.util.Log
@@ -5,7 +8,6 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -16,9 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -26,41 +26,41 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
-import com.example.dam.Screens.AddPublicationScreen
-import com.example.dam.Screens.HomeExploreScreen
-import com.example.dam.Screens.ProfileScreen
-import com.example.dam.Screens.CreateAdventureScreen
-import com.example.dam.Screens.FeedScreen
-import com.example.dam.Screens.EditProfile1Screen
+import androidx.navigation.navArgument
+import com.example.dam.Screens.*
 import com.example.dam.utils.UserPreferences
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
-fun TabBarView(navController: NavHostController) {
+fun TabBarView(
+    navController: NavHostController
+) {
     val context = LocalContext.current
     var showOptions by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
-    // Create internal nav controller for screens within TabBar
     val internalNavController = rememberNavController()
     val navBackStackEntry by internalNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    val tabs = listOf("Home", "Map", "Add", "Community", "Profile")
+    // ✅ CHANGÉ: "Discussions" au lieu de "Map"
+    val tabs = listOf("Home", "Discussions", "Add", "Community", "Profile")
     var selectedTab by remember { mutableStateOf(0) }
 
-    // Update selected tab based on current route
     LaunchedEffect(currentRoute) {
-        selectedTab = when (currentRoute) {
-            "home" -> 0
-            "map" -> 1
-            "add" -> 2
-            "feed" -> 3
-            "profile" -> 4
+        selectedTab = when {
+            currentRoute == "home" -> 0
+            currentRoute == "messages" -> 1  // ✅ CHANGÉ
+            currentRoute == "add" -> 2
+            currentRoute == "feed" -> 3
+            currentRoute == "profile" -> 4
+            currentRoute?.startsWith("sortieDetail") == true -> 0
+            currentRoute?.startsWith("chatConversation") == true -> 1  // ✅ AJOUTÉ
             else -> selectedTab
         }
     }
@@ -74,8 +74,9 @@ fun TabBarView(navController: NavHostController) {
         label = "rotation"
     )
 
-    // Check if we should show bars (hide on edit profile, add publication, etc.)
-    val shouldShowBars = currentRoute !in listOf("edit_profile", "addpublication")
+    val shouldShowBars = currentRoute !in listOf("edit_profile", "addpublication") &&
+            currentRoute?.startsWith("sortieDetail") != true &&
+            currentRoute?.startsWith("chatConversation") != true  // ✅ AJOUTÉ
 
     Box(
         modifier = Modifier
@@ -90,14 +91,11 @@ fun TabBarView(navController: NavHostController) {
                 )
             )
     ) {
-        // Main Content
         Column(modifier = Modifier.fillMaxSize()) {
-            // Top Bar
             if (shouldShowBars) {
                 Spacer(modifier = Modifier.height(60.dp))
             }
 
-            // Content Area with Navigation
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -108,35 +106,72 @@ fun TabBarView(navController: NavHostController) {
                     startDestination = "home"
                 ) {
                     composable("home") {
-                        HomeExploreScreen(navController = internalNavController)
+                        HomeExploreScreen(navController = navController)
                     }
-                    composable("map") {
-                        ScreenPlaceholder("Map View")
+                    // ✅ CHANGÉ: Messages au lieu de Map
+                    composable("messages") {
+                        MessagesListScreen(navController = navController)
                     }
                     composable("add") {
                         val token = UserPreferences.getToken(context) ?: ""
                         CreateAdventureScreen(
-                            navController = internalNavController,
+                            navController = navController,
                             token = token
                         )
                     }
                     composable("feed") {
-                        FeedScreen(navController = internalNavController)
+                        FeedScreen(navController = navController)
                     }
                     composable("profile") {
-                        ProfileScreen(navController = internalNavController)
+                        ProfileScreen(navController = navController)
                     }
                     composable("edit_profile") {
-                        EditProfile1Screen(navController = internalNavController)
+                        EditProfile1Screen(navController = navController)
                     }
                     composable("addpublication") {
-                        AddPublicationScreen(navController = internalNavController)
+                        AddPublicationScreen(navController = navController)
+                    }
+                    composable(
+                        route = "sortieDetail/{sortieId}",
+                        arguments = listOf(
+                            navArgument("sortieId") {
+                                type = NavType.StringType
+                            }
+                        )
+                    ) { backStackEntry ->
+                        val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
+                        SortieDetailScreen(
+                            navController = navController,
+                            sortieId = sortieId
+                        )
+                    }
+                    // ✅ AJOUTÉ: Route pour la conversation
+                    composable(
+                        route = "chatConversation/{groupId}/{groupName}/{groupEmoji}/{participantsCount}",
+                        arguments = listOf(
+                            navArgument("groupId") { type = NavType.StringType },
+                            navArgument("groupName") { type = NavType.StringType },
+                            navArgument("groupEmoji") { type = NavType.StringType },
+                            navArgument("participantsCount") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+                        val groupName = backStackEntry.arguments?.getString("groupName") ?: ""
+                        val groupEmoji = backStackEntry.arguments?.getString("groupEmoji") ?: ""
+                        val participantsCount = backStackEntry.arguments?.getString("participantsCount") ?: "0"
+
+                        ChatConversationScreen(
+                            navController = navController,
+                            groupId = groupId,
+                            groupName = groupName,
+                            groupEmoji = groupEmoji,
+                            participantsCount = participantsCount
+                        )
                     }
                 }
             }
         }
 
-        // Top Bar with Dropdown
         if (shouldShowBars) {
             Column(
                 modifier = Modifier
@@ -144,7 +179,6 @@ fun TabBarView(navController: NavHostController) {
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
             ) {
-                // Top Bar - Glass Design
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = BackgroundGradientStart
@@ -206,7 +240,6 @@ fun TabBarView(navController: NavHostController) {
                     }
                 }
 
-                // Dropdown Menu
                 AnimatedVisibility(
                     visible = showOptions,
                     enter = slideInVertically(
@@ -229,7 +262,6 @@ fun TabBarView(navController: NavHostController) {
             }
         }
 
-        // Glass Bottom Navigation Bar
         if (shouldShowBars) {
             Box(
                 modifier = Modifier
@@ -246,7 +278,8 @@ fun TabBarView(navController: NavHostController) {
                             0 -> internalNavController.navigate("home") {
                                 popUpTo("home") { inclusive = true }
                             }
-                            1 -> internalNavController.navigate("map") {
+                            // ✅ CHANGÉ: Navigation vers messages
+                            1 -> internalNavController.navigate("messages") {
                                 popUpTo("home") { saveState = true }
                                 launchSingleTop = true
                                 restoreState = true
@@ -273,7 +306,6 @@ fun TabBarView(navController: NavHostController) {
         }
     }
 
-    // Logout Dialog
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -416,7 +448,6 @@ fun GlassBottomNav(
     onTabSelected: (Int) -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
-        // Glow effect
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -435,7 +466,6 @@ fun GlassBottomNav(
                 .blur(12.dp)
         )
 
-        // Glass navbar
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(35.dp),
@@ -461,12 +491,7 @@ fun GlassBottomNav(
             ) {
                 tabs.forEachIndexed { index, label ->
                     if (index == 2) {
-                        // Center Add Button - Elevated
-                        Box(
-                            modifier = Modifier
-                                .size(60.dp)
-                        ) {
-                            // Glow
+                        Box(modifier = Modifier.size(60.dp)) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -482,28 +507,20 @@ fun GlassBottomNav(
                                     .blur(8.dp)
                             )
 
-                            // Button
                             Surface(
                                 onClick = { onTabSelected(index) },
                                 shape = CircleShape,
                                 color = Color.Transparent,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .border(
-                                        width = 4.dp,
-                                        color = BackgroundDark,
-                                        shape = CircleShape
-                                    )
+                                    .border(4.dp, BackgroundDark, CircleShape)
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .background(
                                             Brush.radialGradient(
-                                                colors = listOf(
-                                                    GreenAccent,
-                                                    TealAccent
-                                                )
+                                                colors = listOf(GreenAccent, TealAccent)
                                             )
                                         ),
                                     contentAlignment = Alignment.Center
@@ -518,7 +535,6 @@ fun GlassBottomNav(
                             }
                         }
                     } else {
-                        // Regular Tab
                         Surface(
                             onClick = { onTabSelected(index) },
                             shape = RoundedCornerShape(20.dp),
@@ -539,7 +555,7 @@ fun GlassBottomNav(
                                 Icon(
                                     imageVector = when (label) {
                                         "Home" -> Icons.Default.Home
-                                        "Map" -> Icons.Default.Map
+                                        "Discussions" -> Icons.Default.ChatBubble  // ✅ CHANGÉ
                                         "Community" -> Icons.Default.Group
                                         "Profile" -> Icons.Default.Person
                                         else -> Icons.Default.Home

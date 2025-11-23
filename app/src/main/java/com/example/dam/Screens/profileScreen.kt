@@ -1,35 +1,41 @@
 package com.example.dam.Screens
 
 import android.content.Context
+import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.dam.R
+import com.example.dam.ui.theme.*
 import com.example.dam.viewmodel.UserViewModel
-
-// Colors - Make sure these match your theme
-private val BackgroundDark = Color(0xFF0F0F0F)
-private val TextPrimary = Color(0xFFFFFFFF)
-private val TextSecondary = Color(0xFF9CA3AF)
-private val GreenAccent = Color(0xFF4ADE80)
 
 @Composable
 fun ProfileScreen(
@@ -48,6 +54,33 @@ fun ProfileScreen(
     val currentUser by viewModel.currentUser.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
 
+    // Selected tab state
+    var selectedTab by remember { mutableStateOf(0) }
+
+    // Image picker state
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+
+    val imagePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri: Uri? ->
+        uri?.let {
+            selectedImageUri = it
+            // Upload the selected image
+            viewModel.uploadAvatar(
+                userId = userId,
+                imageUri = it,
+                context = context,
+                onSuccess = {
+                    // Image uploaded successfully, profile will refresh automatically
+                },
+                onError = { errorMessage ->
+                    // Handle error - you can show a Toast or Snackbar here
+                    android.util.Log.e("ProfileScreen", "Upload failed: $errorMessage")
+                }
+            )
+        }
+    }
+
     // Load user data when screen opens
     LaunchedEffect(Unit) {
         if (userId.isNotEmpty() && token.isNotEmpty()) {
@@ -58,63 +91,151 @@ fun ProfileScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundDark)
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        BackgroundGradientStart,
+                        BackgroundDark,
+                        BackgroundGradientEnd
+                    )
+                )
+            )
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 64.dp) // ✅ Space for top bar
+                .padding(top = 64.dp)
                 .verticalScroll(rememberScrollState())
-                .padding(bottom = 96.dp) // ✅ Space for bottom nav bar
+                .padding(bottom = 96.dp)
         ) {
-            // Pass user data to ProfileHeader
-            ProfileHeader(
-                navController = navController,
+            // Profile Header with stats
+            ProfileHeaderNew(
                 userName = currentUser?.let { "${it.firstName} ${it.lastName}" } ?: "Loading...",
-                userEmail = currentUser?.email ?: "",
-                isLoading = isLoading
+                userBio = currentUser?.email ?: "",
+                avatarUrl = currentUser?.avatar,
+                adventureCount = 127,
+                followersCount = 1243,
+                followingCount = 456,
+                location = "Tunis",
+                isLoading = isLoading,
+                onImageClick = { imagePickerLauncher.launch("image/*") }
             )
 
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Action Buttons
+            ActionButtons(navController)
+
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Statistiques
-            StatisticsSection()
+            // Tabs
+            TabSection(
+                selectedTab = selectedTab,
+                onTabSelected = { selectedTab = it }
+            )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Adventure Grid
+            if (selectedTab == 0) {
+                AdventureGrid()
+            } else {
+                CreatedAdventuresGrid()
+            }
         }
     }
 }
 
 @Composable
-fun ProfileHeader(
-    navController: NavHostController,
+fun ProfileHeaderNew(
     userName: String,
-    userEmail: String,
-    isLoading: Boolean
+    userBio: String,
+    avatarUrl: String?,
+    adventureCount: Int,
+    followersCount: Int,
+    followingCount: Int,
+    location: String,
+    isLoading: Boolean,
+    onImageClick: () -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 16.dp)
+            .padding(horizontal = 20.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Photo de profil
+        // Profile Image with Camera Icon
         Box(
             modifier = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(Color.Gray)
+                .size(100.dp)
+                .clickable { onImageClick() }
         ) {
-            Image(
-                painter = painterResource(id = R.drawable.homme),
-                contentDescription = "Profile Picture",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+            // Profile Image
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clip(CircleShape)
+                    .border(3.dp, GreenAccent, CircleShape)
+                    .background(CardDark)
+            ) {
+                if (!avatarUrl.isNullOrEmpty()) {
+                    // Display avatar from database
+                    AsyncImage(
+                        model = ImageRequest.Builder(LocalContext.current)
+                            .data(avatarUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = "Profile Picture",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        error = painterResource(id = R.drawable.homme),
+                        placeholder = painterResource(id = R.drawable.homme)
+                    )
+                } else {
+                    // Default profile image when avatar is null or empty
+                    Image(
+                        painter = painterResource(id = R.drawable.homme),
+                        contentDescription = "Default Profile Picture",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                }
+            }
+
+            // Camera Icon Overlay - always visible to allow adding/changing photo
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .align(Alignment.BottomEnd)
+                    .clip(CircleShape)
+                    .background(GreenAccent)
+                    .clickable { onImageClick() },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = "Change Photo",
+                    tint = Color.White,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // Stats Row
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly
+        ) {
+            StatItem(count = adventureCount, label = "aventures")
+            StatItem(count = followersCount, label = "followers")
+            StatItem(count = followingCount, label = "following")
         }
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Display actual user name with loading state
+        // User Name
         if (isLoading) {
             CircularProgressIndicator(
                 modifier = Modifier.size(24.dp),
@@ -125,266 +246,428 @@ fun ProfileHeader(
             Text(
                 text = userName,
                 color = TextPrimary,
-                fontSize = 24.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.Bold
             )
         }
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // Display user email
-        if (!isLoading && userEmail.isNotEmpty()) {
-            Text(
-                text = userEmail,
-                color = TextSecondary,
-                fontSize = 14.sp
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // Localisation et followers
-        Row(
-            verticalAlignment = Alignment.CenterVertically
+        // Bio with icons
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_mylocation),
-                contentDescription = "Location",
-                tint = TextSecondary,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "San Francisco, CA",
-                color = TextSecondary,
-                fontSize = 14.sp
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_my_calendar),
-                contentDescription = "Followers",
-                tint = TextSecondary,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "245 followers",
-                color = TextSecondary,
-                fontSize = 14.sp
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Date d'inscription
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_my_calendar),
-                contentDescription = "Calendar",
-                tint = TextSecondary,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Text(
-                text = "Member since 2018",
-                color = TextSecondary,
-                fontSize = 14.sp
-            )
-        }
-
-        Spacer(modifier = Modifier.height(20.dp))
-
-        // Bouton Edit Profile
-        Button(
-            onClick = {
-                navController.navigate("edit_profile")
-            },
-            colors = ButtonDefaults.buttonColors(
-                containerColor = GreenAccent,
-                contentColor = Color.Black
-            ),
-            shape = RoundedCornerShape(8.dp),
-            modifier = Modifier.height(44.dp),
-            enabled = !isLoading
-        ) {
-            Icon(
-                painter = painterResource(id = android.R.drawable.ic_menu_edit),
-                contentDescription = "Edit",
-                modifier = Modifier.size(18.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "Edit Profile",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
-    }
-}
-
-@Composable
-fun StatisticsSection() {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-    ) {
-        Text(
-            text = "Your Statistics",
-            color = TextPrimary,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // Conteneur parent avec effet Glass 26
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(24.dp),
-            color = Color(0xFF1A1A1A).copy(alpha = 0.26f),
-            shadowElevation = 8.dp
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        color = Color(0xFF2A2A2A).copy(alpha = 0.26f),
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                    .padding(16.dp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // Grille de statistiques 2x2 avec effet Glassy
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatCard(
-                            icon = "📊",
-                            label = "Distance",
-                            value = "2,547",
-                            unit = "km",
-                            subtitle = "+123 km this month",
-                            iconColor = Color(0xFF3B82F6),
-                            modifier = Modifier.weight(1f)
-                        )
+                Text(text = "🚴", fontSize = 14.sp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Passionné de vélo et nature",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = "🏔", fontSize = 14.sp)
+            }
 
-                        StatCard(
-                            icon = "⏱",
-                            label = "Time",
-                            value = "187",
-                            unit = "hours",
-                            subtitle = "+8 hours this month",
-                            iconColor = GreenAccent,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
+            Spacer(modifier = Modifier.height(4.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        StatCard(
-                            icon = "⛰",
-                            label = "Elevation",
-                            value = "28,650",
-                            unit = "m",
-                            subtitle = "+1,200 m this month",
-                            iconColor = GreenAccent,
-                            modifier = Modifier.weight(1f)
-                        )
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(text = "🏔", fontSize = 14.sp)
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Explorateur d'aventures | Tunisie",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+            }
 
-                        StatCard(
-                            icon = "🔥",
-                            label = "Calories",
-                            value = "78,345",
-                            unit = "kcal",
-                            subtitle = "+3,450 kcal this month",
-                            iconColor = Color(0xFFEF4444),
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
+            Spacer(modifier = Modifier.height(4.dp))
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Default.LocationOn,
+                    contentDescription = "Location",
+                    tint = GreenAccent,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = location,
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(text = "•", fontSize = 14.sp, color = TextSecondary)
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = Icons.Default.Explore,
+                    contentDescription = "Adventures",
+                    tint = GreenAccent,
+                    modifier = Modifier.size(14.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "$adventureCount aventures complétées",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
             }
         }
     }
 }
 
 @Composable
-fun StatCard(
-    icon: String,
+fun StatItem(count: Int, label: String) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = count.toString(),
+            color = TextPrimary,
+            fontSize = 20.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Text(
+            text = label,
+            color = TextSecondary,
+            fontSize = 12.sp
+        )
+    }
+}
+
+@Composable
+fun ActionButtons(navController: NavHostController) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Button(
+            onClick = { navController.navigate("edit_profile") },
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = CardDark
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Edit,
+                contentDescription = "Edit",
+                tint = GreenAccent,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Modifier le profil",
+                color = TextPrimary,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+
+        Button(
+            onClick = { /* TODO: Share profile */ },
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = GreenAccent
+            ),
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Share,
+                contentDescription = "Share",
+                tint = Color.White,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "Partager profil",
+                color = Color.White,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Medium
+            )
+        }
+    }
+}
+
+@Composable
+fun TabSection(selectedTab: Int, onTabSelected: (Int) -> Unit) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        TabItem(
+            icon = Icons.Default.DirectionsBike,
+            label = "Mes Sorties",
+            isSelected = selectedTab == 0,
+            onClick = { onTabSelected(0) },
+            modifier = Modifier.weight(1f)
+        )
+
+        TabItem(
+            icon = Icons.Default.Add,
+            label = "Créées",
+            isSelected = selectedTab == 1,
+            onClick = { onTabSelected(1) },
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun TabItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    value: String,
-    unit: String,
-    subtitle: String,
-    iconColor: Color,
+    isSelected: Boolean,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Surface(
-        modifier = modifier.height(140.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = Color(0xFF1F1F1F).copy(alpha = 0.5f),
-        shadowElevation = 4.dp
+        modifier = modifier
+            .height(50.dp)
+            .clickable { onClick() },
+        shape = RoundedCornerShape(12.dp),
+        color = if (isSelected) CardDark else Color.Transparent,
+        border = androidx.compose.foundation.BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) GreenAccent else BorderColor
+        )
     ) {
-        Box(
+        Row(
             modifier = Modifier
                 .fillMaxSize()
-                .background(
-                    color = Color(0xFF252525).copy(alpha = 0.4f),
-                    shape = RoundedCornerShape(16.dp)
+                .then(
+                    if (isSelected) {
+                        Modifier.background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    GreenAccent.copy(alpha = 0.15f),
+                                    TealAccent.copy(alpha = 0.15f)
+                                )
+                            )
+                        )
+                    } else {
+                        Modifier
+                    }
                 )
+                .padding(horizontal = 16.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
         ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = if (isSelected) GreenAccent else TextSecondary,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = label,
+                color = if (isSelected) GreenAccent else TextSecondary,
+                fontSize = 14.sp,
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+            )
+        }
+    }
+}
+
+@Composable
+fun AdventureGrid() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Sample adventures - Replace with actual data from backend
+        AdventureCard(
+            title = "Tour du Lac",
+            date = "15 Nov",
+            participants = 8,
+            distance = 45,
+            imageRes = R.drawable.homme
+        )
+        AdventureCard(
+            title = "Montagne Verte",
+            date = "18 Nov",
+            participants = 12,
+            distance = 18,
+            imageRes = R.drawable.jbal
+        )
+        AdventureCard(
+            title = "Camping Desert",
+            date = "08 Nov",
+            participants = 6,
+            distance = 120,
+            imageRes = R.drawable.camping
+        )
+        AdventureCard(
+            title = "Coastal Ride",
+            date = "05 Nov",
+            participants = 15,
+            distance = 60,
+            imageRes = R.drawable.download
+        )
+    }
+}
+
+@Composable
+fun CreatedAdventuresGrid() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp, vertical = 32.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "No adventures",
+                tint = TextTertiary,
+                modifier = Modifier.size(64.dp)
+            )
+            Text(
+                text = "Aucune aventure créée",
+                color = TextPrimary,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Bold,
+                textAlign = TextAlign.Center
+            )
+            Text(
+                text = "Les aventures que vous créez apparaîtront ici",
+                color = TextSecondary,
+                fontSize = 14.sp,
+                textAlign = TextAlign.Center
+            )
+        }
+    }
+}
+
+@Composable
+fun AdventureCard(
+    title: String,
+    date: String,
+    participants: Int,
+    distance: Int,
+    imageRes: Int
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(160.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = CardGlass,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+    ) {
+        Box(modifier = Modifier.fillMaxSize()) {
+            // Background Image
+            Image(
+                painter = painterResource(id = imageRes),
+                contentDescription = title,
+                modifier = Modifier.fillMaxSize(),
+                contentScale = ContentScale.Crop,
+                alpha = 0.4f
+            )
+
+            // Gradient Overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                CardDark.copy(alpha = 0.9f)
+                            )
+                        )
+                    )
+            )
+
+            // Content
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(16.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
-                // Header avec icône et label
+                // Title
+                Text(
+                    text = title,
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // Stats Row
                 Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = icon,
-                        fontSize = 16.sp,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-                    Text(
-                        text = label,
-                        color = TextSecondary,
-                        fontSize = 13.sp
-                    )
-                }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.CalendarToday,
+                            contentDescription = "Date",
+                            tint = GreenAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = date,
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
 
-                // Valeur principale
-                Row(
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Text(
-                        text = value,
-                        color = TextPrimary,
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = unit,
-                        color = TextSecondary,
-                        fontSize = 14.sp,
-                        modifier = Modifier.padding(bottom = 2.dp)
-                    )
-                }
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Group,
+                            contentDescription = "Participants",
+                            tint = GreenAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "$participants",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
 
-                // Sous-titre
-                Text(
-                    text = subtitle,
-                    color = GreenAccent,
-                    fontSize = 11.sp
-                )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Route,
+                            contentDescription = "Distance",
+                            tint = GreenAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "$distance",
+                            color = GreenAccent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.width(2.dp))
+                        Text(
+                            text = "km",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                    }
+                }
             }
         }
     }

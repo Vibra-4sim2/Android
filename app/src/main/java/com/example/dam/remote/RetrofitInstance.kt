@@ -65,6 +65,18 @@ object RetrofitInstance {
     val publicationApi: PublicationApiService by lazy {
         retrofit.create(PublicationApiService::class.java)
     }
+
+
+    /**
+     * ✅ NOUVELLE INSTANCE - API des chats
+     */
+    val chatApi: ChatApiService by lazy {
+        retrofit.create(ChatApiService::class.java)
+    }
+
+    val messageApi: MessageApiService by lazy {
+        retrofit.create(MessageApiService::class.java)
+    }
 }
 
 

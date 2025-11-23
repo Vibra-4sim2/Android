@@ -6,13 +6,15 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -20,7 +22,9 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -28,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.dam.R
 import com.example.dam.models.SortieResponse
 import com.example.dam.ui.theme.*
@@ -41,7 +46,32 @@ fun HomeExploreScreen(
     navController: NavController,
     viewModel: HomeExploreViewModel = viewModel()
 ) {
-    val filteredSorties = viewModel.getFilteredSorties()
+    // ✅ Trier les sorties par date (plus récent en premier)
+    val filteredSorties = viewModel.getFilteredSorties().sortedByDescending {
+        try {
+            val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+            format.timeZone = TimeZone.getTimeZone("UTC")
+            format.parse(it.date)?.time ?: 0L
+        } catch (e: Exception) {
+            0L
+        }
+    }
+
+    // ✅ Pull to refresh Material 3
+    val pullToRefreshState = rememberPullToRefreshState()
+
+    LaunchedEffect(pullToRefreshState.isRefreshing) {
+        if (pullToRefreshState.isRefreshing) {
+            viewModel.refresh()
+        }
+    }
+
+    // Arrêter le refresh une fois terminé
+    LaunchedEffect(viewModel.isLoading) {
+        if (!viewModel.isLoading && pullToRefreshState.isRefreshing) {
+            pullToRefreshState.endRefresh()
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -66,7 +96,6 @@ fun HomeExploreScreen(
                     .padding(horizontal = 20.dp, vertical = 16.dp)
             ) {
                 Spacer(modifier = Modifier.height(24.dp))
-
 
                 // Glass Search Bar
                 Box(
@@ -196,8 +225,12 @@ fun HomeExploreScreen(
                 }
             }
 
-            // Content Section with States
-            Box(modifier = Modifier.fillMaxSize()) {
+            // Content Section with Pull to Refresh
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .nestedScroll(pullToRefreshState.nestedScrollConnection)
+            ) {
                 when {
                     viewModel.isLoading && viewModel.sorties.isEmpty() -> {
                         // Initial Loading State
@@ -311,39 +344,23 @@ fun HomeExploreScreen(
                     }
 
                     else -> {
-                        // Success State - Show List
+                        // Success State - Show List with newest first
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
                             contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
-                            // Pull to Refresh Indicator
-                            if (viewModel.isLoading) {
-                                item {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(vertical = 8.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        CircularProgressIndicator(
-                                            color = GreenAccent,
-                                            strokeWidth = 2.dp,
-                                            modifier = Modifier.size(24.dp)
-                                        )
-                                    }
-                                }
-                            }
-
                             items(filteredSorties) { sortie ->
                                 ModernEventCard(
                                     sortie = sortie,
                                     onClick = {
                                         navController.navigate("sortieDetail/${sortie.id}")
+                                    },
+                                    onUserClick = { userId ->
+                                        navController.navigate("userProfile/$userId")
                                     }
                                 )
                             }
-
                             // Bottom spacing for navbar
                             item {
                                 Spacer(modifier = Modifier.height(100.dp))
@@ -352,22 +369,14 @@ fun HomeExploreScreen(
                     }
                 }
 
-                // Floating Refresh Button (when content is visible)
-                if (viewModel.sorties.isNotEmpty() && !viewModel.isLoading) {
-                    FloatingActionButton(
-                        onClick = { viewModel.refresh() },
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(20.dp)
-                            .padding(bottom = 80.dp),
-                        containerColor = GreenAccent,
-                        contentColor = Color.White
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Refresh,
-                            contentDescription = "Refresh"
-                        )
-                    }
+                // ✅ Pull to Refresh Indicator Material 3 (seulement visible pendant refresh)
+                if (pullToRefreshState.isRefreshing || pullToRefreshState.progress > 0f) {
+                    PullToRefreshContainer(
+                        state = pullToRefreshState,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        containerColor = CardDark,
+                        contentColor = GreenAccent
+                    )
                 }
             }
         }
@@ -429,18 +438,20 @@ fun FilterPill(
     }
 }
 
+// ========== REPLACE YOUR ModernEventCard FUNCTION WITH THIS ==========
+
 @Composable
 fun ModernEventCard(
     sortie: SortieResponse,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onUserClick: ((String) -> Unit)? = null  // ✅ NEW: Callback for user profile click
 ) {
-    // Helper function to format date
+    // Helper functions remain the same
     fun formatDate(dateString: String): String {
         return try {
             val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
             inputFormat.timeZone = TimeZone.getTimeZone("UTC")
             val date = inputFormat.parse(dateString)
-
             val outputFormat = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
             date?.let { outputFormat.format(it) } ?: dateString
         } catch (e: Exception) {
@@ -448,13 +459,11 @@ fun ModernEventCard(
         }
     }
 
-    // Helper function to format time
     fun formatTime(dateString: String): String {
         return try {
             val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
             inputFormat.timeZone = TimeZone.getTimeZone("UTC")
             val date = inputFormat.parse(dateString)
-
             val outputFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
             date?.let { outputFormat.format(it) } ?: ""
         } catch (e: Exception) {
@@ -462,7 +471,6 @@ fun ModernEventCard(
         }
     }
 
-    // Helper function to get difficulty color
     fun getDifficultyColor(type: String): Color {
         return when (type) {
             "RANDONNEE" -> WarningOrange
@@ -472,7 +480,6 @@ fun ModernEventCard(
         }
     }
 
-    // Helper function to format type
     fun formatType(type: String): String {
         return when (type) {
             "RANDONNEE" -> "Hiking"
@@ -482,7 +489,6 @@ fun ModernEventCard(
         }
     }
 
-    // Helper function to get default image
     fun getDefaultImage(type: String): Int {
         return when (type) {
             "VELO" -> R.drawable.homme
@@ -518,7 +524,6 @@ fun ModernEventCard(
                     .fillMaxWidth()
                     .height(176.dp)
             ) {
-                // Load image from API or use default
                 if (sortie.photo != null && sortie.photo.isNotEmpty()) {
                     AsyncImage(
                         model = sortie.photo,
@@ -537,7 +542,6 @@ fun ModernEventCard(
                     )
                 }
 
-                // Gradient overlay
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -571,7 +575,7 @@ fun ModernEventCard(
                     }
                 }
 
-                // Camping Badge (if included)
+                // Camping Badge
                 if (sortie.optionCamping) {
                     Surface(
                         modifier = Modifier
@@ -650,7 +654,7 @@ fun ModernEventCard(
                         verticalAlignment = Alignment.CenterVertically,
                         modifier = Modifier.weight(1f)
                     ) {
-                        // Default Avatar with initials
+                        // ✅ UPDATED: Clickable Avatar
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
@@ -660,15 +664,35 @@ fun ModernEventCard(
                                     Brush.linearGradient(
                                         colors = listOf(GreenAccent, TealAccent)
                                     )
-                                ),
+                                )
+                                .clickable {
+                                    // ✅ Navigate to user profile when clicked
+                                    onUserClick?.invoke(sortie.createurId.id)
+                                },
                             contentAlignment = Alignment.Center
                         ) {
-                            Text(
-                                text = sortie.createurId.email.take(1).uppercase(),
-                                color = Color.White,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                            val creatorAvatar = sortie.createurId.avatar
+
+                            if (creatorAvatar != null && creatorAvatar.isNotEmpty()) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(LocalContext.current)
+                                        .data(creatorAvatar)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = "User Avatar",
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentScale = ContentScale.Crop,
+                                    error = painterResource(id = R.drawable.homme),
+                                    placeholder = painterResource(id = R.drawable.homme)
+                                )
+                            } else {
+                                Text(
+                                    text = sortie.createurId.email.take(1).uppercase(),
+                                    color = Color.White,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
 
                         Column(modifier = Modifier.weight(1f)) {

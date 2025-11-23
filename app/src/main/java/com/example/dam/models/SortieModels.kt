@@ -72,7 +72,10 @@ data class SortieResponse(
 
 data class CreateurInfo(
     @SerializedName("_id") val id: String,
-    @SerializedName("email") val email: String
+    @SerializedName("email") val email: String,
+    @SerializedName("firstName") val firstName: String? = null,
+    @SerializedName("lastName") val lastName: String? = null,
+    @SerializedName("avatar") val avatar: String? = null
 )
 
 data class CampingInfo(
