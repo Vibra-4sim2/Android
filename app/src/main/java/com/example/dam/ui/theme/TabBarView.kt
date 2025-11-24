@@ -1,6 +1,3 @@
-// ========== MISE À JOUR 1: TabBarView.kt ==========
-// Remplacez votre TabBarView.kt par ce code:
-
 package com.example.dam.ui.theme
 
 import android.util.Log
@@ -8,6 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,13 +16,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -34,6 +35,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.dam.Screens.*
 import com.example.dam.utils.UserPreferences
+import com.example.dam.viewmodel.ChatViewModel
+import com.example.dam.viewmodel.LoginViewModel
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -43,6 +46,10 @@ fun TabBarView(
     val context = LocalContext.current
     var showOptions by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+
+    // ✅ AJOUTÉ: ViewModels
+    val chatViewModel: ChatViewModel = viewModel()
+    val loginViewModel: LoginViewModel = viewModel()
 
     val internalNavController = rememberNavController()
     val navBackStackEntry by internalNavController.currentBackStackEntryAsState()
@@ -65,6 +72,7 @@ fun TabBarView(
 //        }
 //    }
 
+    // Update selected tab based on current route
     LaunchedEffect(currentRoute) {
         selectedTab = when (currentRoute) {
             "home" -> 0
@@ -75,8 +83,6 @@ fun TabBarView(
             else -> selectedTab // Garde l'onglet actuel (très important !)
         }
     }
-
-
 
     val rotation by animateFloatAsState(
         targetValue = if (showOptions) 180f else 0f,
@@ -113,11 +119,14 @@ fun TabBarView(
                 )
             )
     ) {
+        // Main Content
         Column(modifier = Modifier.fillMaxSize()) {
+            // Top Bar
             if (shouldShowBars) {
                 Spacer(modifier = Modifier.height(60.dp))
             }
 
+            // Content Area with Navigation
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -128,7 +137,7 @@ fun TabBarView(
                     startDestination = "home"
                 ) {
                     composable("home") {
-                        HomeExploreScreen(navController = navController)
+                        HomeExploreScreen(navController = internalNavController)
                     }
                     // ✅ CHANGÉ: Messages au lieu de Map
                     composable("messages") {
@@ -137,18 +146,18 @@ fun TabBarView(
                     composable("add") {
                         val token = UserPreferences.getToken(context) ?: ""
                         CreateAdventureScreen(
-                            navController = navController,
+                            navController = internalNavController,
                             token = token
                         )
                     }
                     composable("feed") {
-                        FeedScreen(navController = navController)
+                        FeedScreen(navController = internalNavController)
                     }
                     composable("profile") {
-                        ProfileScreen(navController = navController)
+                        ProfileScreen(navController = internalNavController)
                     }
                     composable("edit_profile") {
-                        EditProfile1Screen(navController = navController)
+                        EditProfile1Screen(navController = internalNavController)
                     }
                     composable("addpublication") {
                         AddPublicationScreen(navController = navController)
@@ -194,6 +203,7 @@ fun TabBarView(
             }
         }
 
+        // Top Bar with Dropdown
         if (shouldShowBars) {
             Column(
                 modifier = Modifier
@@ -201,6 +211,7 @@ fun TabBarView(
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
             ) {
+                // Top Bar - Glass Design
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = BackgroundGradientStart
@@ -262,6 +273,7 @@ fun TabBarView(
                     }
                 }
 
+                // Dropdown Menu
                 AnimatedVisibility(
                     visible = showOptions,
                     enter = slideInVertically(
@@ -284,6 +296,7 @@ fun TabBarView(
             }
         }
 
+        // Glass Bottom Navigation Bar
         if (shouldShowBars) {
             Box(
                 modifier = Modifier
@@ -328,6 +341,7 @@ fun TabBarView(
         }
     }
 
+    // Logout Dialog
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -348,6 +362,8 @@ fun TabBarView(
             confirmButton = {
                 Button(
                     onClick = {
+                        ///hethy l zedetha syrine fel logout
+                        loginViewModel.logout(context, chatViewModel)
                         Log.d("TabBarView", "========== LOGOUT ==========")
                         Log.d("TabBarView", "Token avant: ${UserPreferences.getToken(context)?.take(20)}")
 
@@ -470,6 +486,7 @@ fun GlassBottomNav(
     onTabSelected: (Int) -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
+        // Glow effect
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -488,6 +505,7 @@ fun GlassBottomNav(
                 .blur(12.dp)
         )
 
+        // Glass navbar
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(35.dp),
@@ -529,6 +547,7 @@ fun GlassBottomNav(
                                     .blur(8.dp)
                             )
 
+                            // Button
                             Surface(
                                 onClick = { onTabSelected(index) },
                                 shape = CircleShape,
@@ -557,6 +576,7 @@ fun GlassBottomNav(
                             }
                         }
                     } else {
+                        // Regular Tab
                         Surface(
                             onClick = { onTabSelected(index) },
                             shape = RoundedCornerShape(20.dp),

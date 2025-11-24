@@ -1,7 +1,9 @@
-// models/MessageModels.kt
 package com.example.dam.models
 
 import com.google.gson.annotations.SerializedName
+import java.text.SimpleDateFormat
+import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Types de messages supportés
@@ -23,7 +25,13 @@ enum class MessageType {
     LOCATION,
 
     @SerializedName("file")
-    FILE
+    FILE,
+
+    @SerializedName("system")
+    SYSTEM;
+
+    // ✅ AJOUTÉ: Convertir vers lowercase pour l'envoi au backend
+    fun toLowerCaseString(): String = this.name.lowercase()
 }
 
 /**
@@ -39,15 +47,23 @@ data class MessagesResponse(
 
 /**
  * Message reçu du backend
+ * ✅ CORRIGÉ: senderId peut être un objet OU une string OU null
  */
 data class MessageResponse(
-    @SerializedName("_id") val id: String,
+    @SerializedName("_id") val _id: String,
     @SerializedName("chatId") val chatId: String,
     @SerializedName("sortieId") val sortieId: String,
-    @SerializedName("senderId") val senderId: SenderInfo,
-    @SerializedName("type") val type: MessageType,
+
+    // ✅ CORRIGÉ: senderId peut être un objet (populé) ou null (messages système)
+    @SerializedName("senderId") val senderId: SenderInfo? = null,
+
+    @SerializedName("sender") val sender: SenderInfo? = null,
+    @SerializedName("type") val type: String,
     @SerializedName("content") val content: String?,
     @SerializedName("mediaUrl") val mediaUrl: String?,
+    @SerializedName("imageUrl") val imageUrl: String?,
+    @SerializedName("videoUrl") val videoUrl: String?,
+    @SerializedName("audioUrl") val audioUrl: String?,
     @SerializedName("thumbnailUrl") val thumbnailUrl: String?,
     @SerializedName("mediaDuration") val mediaDuration: Double?,
     @SerializedName("fileSize") val fileSize: Long?,
@@ -56,6 +72,7 @@ data class MessageResponse(
     @SerializedName("location") val location: LocationData?,
     @SerializedName("readBy") val readBy: List<String>,
     @SerializedName("isDeleted") val isDeleted: Boolean,
+    @SerializedName("status") val status: String?,
     @SerializedName("createdAt") val createdAt: String,
     @SerializedName("updatedAt") val updatedAt: String?
 )
@@ -124,6 +141,7 @@ data class MessageUI(
     val audioUrl: String?,
     val location: LocationData?,
     val time: String,
+    val timestamp: String, // ✅ AJOUTÉ: Timestamp original pour tri chronologique
     val isMe: Boolean,
     val status: MessageStatus,
     val type: MessageType
@@ -141,41 +159,65 @@ enum class MessageStatus {
 }
 
 /**
- * Extension pour convertir MessageResponse en MessageUI
+ * ✅ CORRIGÉ: Conversion sécurisée d'un message serveur vers MessageUI
  */
-fun MessageResponse.toMessageUI(currentUserId: String): MessageUI {
-    val isMe = senderId.id == currentUserId
-    val authorName = if (isMe) {
-        "Moi"
-    } else {
-        "${senderId.firstName ?: ""} ${senderId.lastName ?: ""}".trim()
-            .ifEmpty { senderId.email }
+fun MessageResponse.toMessageUI(currentUserId: String?): MessageUI {
+    // ✅ Gérer les deux cas: senderId peut être un objet OU null
+    val senderInfo = this.senderId ?: this.sender
+    val actualSenderId = senderInfo?.id
+
+    // Déterminer le nom de l'auteur
+    val author = when {
+        senderInfo != null -> {
+            listOfNotNull(
+                senderInfo.firstName?.trim(),
+                senderInfo.lastName?.trim()
+            ).joinToString(" ").takeIf { it.isNotBlank() } ?: "Utilisateur"
+        }
+        this.type.lowercase() == "system" -> "Système"
+        else -> "Utilisateur"
     }
 
-    // Formater le temps
-    val time = formatMessageTime(createdAt)
+    val avatar = senderInfo?.avatar
+    val isMe = currentUserId != null && actualSenderId != null && actualSenderId == currentUserId
 
-    // Déterminer le statut
-    val status = when {
-        isDeleted -> MessageStatus.FAILED
-        readBy.contains(currentUserId) -> MessageStatus.READ
-        readBy.isNotEmpty() -> MessageStatus.DELIVERED
-        else -> MessageStatus.SENT
+    // Parser le type de message
+    val messageType = when (this.type.lowercase()) {
+        "image" -> MessageType.IMAGE
+        "system" -> MessageType.SYSTEM
+        "audio" -> MessageType.AUDIO
+        "video" -> MessageType.VIDEO
+        "location" -> MessageType.LOCATION
+        "file" -> MessageType.FILE
+        else -> MessageType.TEXT
     }
+
+    // Parser le statut du message
+    val messageStatus = when (this.status?.lowercase()) {
+        "sending" -> MessageStatus.SENDING
+        "sent" -> MessageStatus.SENT
+        "delivered" -> MessageStatus.DELIVERED
+        "read" -> MessageStatus.READ
+        "failed" -> MessageStatus.FAILED
+        else -> if (messageType == MessageType.SYSTEM) MessageStatus.READ else MessageStatus.SENT
+    }
+
+    val time = formatMessageTime(this.createdAt)
 
     return MessageUI(
-        id = id,
-        author = authorName,
-        authorAvatar = senderId.avatar,
-        content = content,
-        imageUrl = if (type == MessageType.IMAGE) mediaUrl else null,
-        videoUrl = if (type == MessageType.VIDEO) mediaUrl else null,
-        audioUrl = if (type == MessageType.AUDIO) mediaUrl else null,
-        location = location,
+        id = this._id,
+        author = author,
+        authorAvatar = avatar,
+        content = this.content,
+        imageUrl = this.imageUrl ?: this.mediaUrl,
+        videoUrl = this.videoUrl,
+        audioUrl = this.audioUrl,
+        location = this.location,
         time = time,
+        timestamp = this.createdAt, // ✅ AJOUTÉ: Timestamp original pour tri
         isMe = isMe,
-        status = status,
-        type = type
+        status = messageStatus,
+        type = messageType
     )
 }
 
@@ -183,13 +225,19 @@ fun MessageResponse.toMessageUI(currentUserId: String): MessageUI {
  * Formater l'heure du message
  */
 private fun formatMessageTime(timestamp: String): String {
-    // TODO: Implémenter le formatage correct avec SimpleDateFormat
-    // Pour l'instant retourne une valeur simple
     return try {
-        // Extraire l'heure de "2025-11-23T15:50:52.870Z"
-        val time = timestamp.substring(11, 16) // "15:50"
-        time
+        // Format ISO 8601: "2025-11-23T15:50:52.870Z"
+        val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+        val outputFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        val date = inputFormat.parse(timestamp)
+        date?.let { outputFormat.format(it) } ?: timestamp.substring(11, 16)
     } catch (e: Exception) {
-        "..."
+        try {
+            // Fallback: extraire directement l'heure
+            timestamp.substring(11, 16)
+        } catch (e: Exception) {
+            "..."
+        }
     }
 }
