@@ -60,15 +60,25 @@ object UserPreferences {
         Log.d(TAG, "✅ First launch marked as complete")
     }
 
-    // ✅ Clear pour le logout (ne supprime pas isFirstLaunch)
+    // ✅ Clear pour le logout (preserve onboarding flags)
     fun clear(context: Context) {
         Log.d(TAG, "🚪 Clearing user session...")
+
+        // Save onboarding status before clearing
+        val wasOnboardingComplete = getPrefs(context).getBoolean(KEY_ONBOARDING_COMPLETE, false)
+
         getPrefs(context).edit()
             .remove(KEY_TOKEN)
             .remove(KEY_USER_ID)
-            .remove(KEY_ONBOARDING_COMPLETE)
-            // NE PAS supprimer KEY_FIRST_LAUNCH
+            // ❌ DO NOT REMOVE KEY_ONBOARDING_COMPLETE
+            // ❌ DO NOT REMOVE KEY_FIRST_LAUNCH
             .apply()
-        Log.d(TAG, "✅ Session cleared")
+
+        // Restore onboarding status (user already completed it once)
+        if (wasOnboardingComplete) {
+            setOnboardingComplete(context, true)
+        }
+
+        Log.d(TAG, "✅ Session cleared (onboarding status preserved: $wasOnboardingComplete)")
     }
 }

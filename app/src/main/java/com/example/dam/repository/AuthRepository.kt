@@ -1,10 +1,17 @@
 package com.example.dam.repository
 
+import android.content.ContentValues.TAG
+import android.content.Context
+import android.net.Uri
 import android.util.Log
 import com.example.dam.models.*
 import com.example.dam.remote.RetrofitInstance
 import com.google.gson.Gson
 import com.google.gson.JsonSyntaxException
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import java.io.File
 
 /**
  * Classe pour encapsuler les résultats des opérations
@@ -13,6 +20,7 @@ sealed class Result<out T> {
     data class Success<T>(val data: T) : Result<T>()
     data class Error(val message: String) : Result<Nothing>()
     object Loading : Result<Nothing>()
+    companion object
 }
 
 /**
@@ -422,7 +430,94 @@ class AuthRepository {
             Result.Error(getNetworkErrorMessage(e))
         }
     }
+
+
+
+
+    /**
+     * Upload user avatar image to Cloudinary
+     * POST /user/{id}/upload
+     */
+    suspend fun uploadAvatar(
+        userId: String,
+        imageUri: Uri,
+        context: Context
+    ): Result<UserProfileResponse> {
+        return try {
+            Log.d(TAG, "========== UPLOAD AVATAR REQUEST ==========")
+            Log.d(TAG, "📤 User ID: $userId")
+            Log.d(TAG, "🖼️ Image URI: $imageUri")
+
+            // Convert URI to File
+            val file = uriToFile(imageUri, context)
+            Log.d(TAG, "📁 File created: ${file.name}, size: ${file.length()} bytes")
+
+            // Create RequestBody from file
+            val requestFile = file.asRequestBody("image/*".toMediaTypeOrNull())
+
+            // Create MultipartBody.Part - the parameter name must be "file" to match your API
+            val body = MultipartBody.Part.createFormData("file", file.name, requestFile)
+
+            Log.d(TAG, "🌐 Calling API: POST /user/$userId/upload")
+            val response = RetrofitInstance.authApi.uploadAvatar(userId, body)
+            Log.d(TAG, "📥 Response code: ${response.code()}")
+
+            if (response.isSuccessful && response.body() != null) {
+                val updatedUser = response.body()!!
+                Log.d(TAG, "✅ Upload successful!")
+                Log.d(TAG, "🖼️ New avatar URL: ${updatedUser.avatar}")
+
+                // Clean up temporary file
+                file.delete()
+
+                Result.Success(updatedUser)
+            } else {
+                val errorBody = response.errorBody()?.string()
+                Log.e(TAG, "❌ Upload error: $errorBody")
+                Log.e(TAG, "❌ Response code: ${response.code()}")
+
+                // Clean up temporary file
+                file.delete()
+
+                val errorMessage = when (response.code()) {
+                    400 -> "Invalid image file. Please select a valid image."
+                    404 -> "User not found."
+                    413 -> "Image file is too large. Please select a smaller image."
+                    500 -> "Server error during upload. Please try again later."
+                    else -> parseErrorMessage(errorBody) ?: "Failed to upload avatar"
+                }
+                Result.Error(errorMessage)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Upload exception: ${e.message}", e)
+            e.printStackTrace()
+            Result.Error("Upload error: ${e.message ?: "Unknown error"}")
+        }
+    }
+
+    /**
+     * Helper function to convert Uri to File
+     */
+    private fun uriToFile(uri: Uri, context: Context): File {
+        val contentResolver = context.contentResolver
+
+        // Create a temporary file in cache directory
+        val fileName = "upload_${System.currentTimeMillis()}.jpg"
+        val file = File(context.cacheDir, fileName)
+
+        // Copy content from URI to file
+        contentResolver.openInputStream(uri)?.use { input ->
+            file.outputStream().use { output ->
+                input.copyTo(output)
+            }
+        }
+
+        return file
+    }
 }
+
+
+
 
 /*
 INSTRUCTIONS:

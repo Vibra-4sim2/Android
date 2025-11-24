@@ -15,7 +15,9 @@ object RetrofitInstance {
     // Pour émulateur Android Studio : 10.0.2.2
     // Pour appareil physique : l'IP de votre PC (ex: 192.168.1.5)
     // Pour trouver votre IP : cmd → ipconfig (Windows) ou ifconfig (Mac/Linux)
-    private const val BASE_URL = "http://10.0.2.2:3000/"
+//    private const val BASE_URL = "http://10.0.2.2:3000/"
+        private const val BASE_URL = "https://dam-4sim2.onrender.com/"
+
 
 //    private const val BASE_URL = "http://192.168.121.98:3000/"
 
@@ -64,6 +66,18 @@ object RetrofitInstance {
      */
     val publicationApi: PublicationApiService by lazy {
         retrofit.create(PublicationApiService::class.java)
+    }
+
+
+    /**
+     * ✅ NOUVELLE INSTANCE - API des chats
+     */
+    val chatApi: ChatApiService by lazy {
+        retrofit.create(ChatApiService::class.java)
+    }
+
+    val messageApi: MessageApiService by lazy {
+        retrofit.create(MessageApiService::class.java)
     }
 }
 

@@ -187,3 +187,62 @@ data class OnboardingPreferencesResponse(
     @SerializedName("updatedAt") val updatedAt: String? = null,
     @SerializedName("__v") val version: Int? = null
 )
+
+
+
+
+/// ========== FOLLOW/UNFOLLOW MODELS ==========
+
+data class FollowResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("message") val message: String,
+    @SerializedName("followersCount") val followersCount: Int? = null
+)
+
+data class IsFollowingResponse(
+    @SerializedName("isFollowing") val isFollowing: Boolean
+
+)
+
+data class FollowStatsResponse(
+    @SerializedName("followers") val followers: Int,
+    @SerializedName("following") val following: Int
+)
+
+data class FollowUserItem(
+    @SerializedName("_id") val id: String,
+    @SerializedName("firstName") val firstName: String,
+    @SerializedName("lastName") val lastName: String,
+    @SerializedName("email") val email: String,
+    @SerializedName("avatar") val avatar: String? = "",
+    @SerializedName("followersCount") val followersCount: Int? = 0,
+    @SerializedName("followingCount") val followingCount: Int? = 0
+)
+
+data class FollowersResponse(
+    @SerializedName("followers") val followers: List<FollowUserItem>,
+    @SerializedName("total") val total: Int,
+    @SerializedName("page") val page: Int,
+    @SerializedName("limit") val limit: Int,
+    @SerializedName("totalPages") val totalPages: Int
+)
+
+data class FollowingResponse(
+    @SerializedName("following") val following: List<FollowUserItem>,
+    @SerializedName("total") val total: Int,
+    @SerializedName("page") val page: Int,
+    @SerializedName("limit") val limit: Int,
+    @SerializedName("totalPages") val totalPages: Int
+)
+
+data class FollowSuggestionsResponse(
+    @SerializedName("suggestions") val suggestions: List<FollowUserItem>,
+    @SerializedName("count") val count: Int
+)
+
+
+
+
+
+
+

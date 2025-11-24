@@ -46,19 +46,16 @@ class CreateAdventureViewModel : ViewModel() {
 
     var polylinePoints by mutableStateOf<List<LatLng>>(emptyList())
 
-    // ✅ NOUVEAU: État pour savoir si on édite départ ou arrivée
     var editingStart by mutableStateOf(true)
     var isSearchingAddress by mutableStateOf(false)
 
     private var geocodeJob: Job? = null
     private var addressSearchJob: Job? = null
 
-    // ✅ NOUVEAU: Fonction pour changer quel point on édite
     fun setEditingPoint(isStart: Boolean) {
         editingStart = isStart
     }
 
-    // ✅ NOUVEAU: Réinitialiser un point
     fun clearStartPoint() {
         startLatLng = null
         startAddress = ""
@@ -99,7 +96,6 @@ class CreateAdventureViewModel : ViewModel() {
         }
     }
 
-    // ✅ NOUVEAU: Rechercher une adresse et la convertir en coordonnées
     fun searchAddress(address: String, isStart: Boolean) {
         if (address.isEmpty()) return
 
@@ -107,7 +103,7 @@ class CreateAdventureViewModel : ViewModel() {
         addressSearchJob?.cancel()
         addressSearchJob = viewModelScope.launch {
             try {
-                delay(500) // Debounce
+                delay(500)
                 val latLng = repo.geocodeAddress(address)
                 if (latLng != null) {
                     if (isStart) {
@@ -203,63 +199,61 @@ class CreateAdventureViewModel : ViewModel() {
     }
 
     fun createAdventure(token: String, photoFile: File?) {
-        if (createResult is Result.Loading) return
-
-        val userId = JwtHelper.getUserIdFromToken(token) ?: "unknown"
-
-        val distanceMeters = distance.replace(" km", "").replace(",", ".")
-            .toDoubleOrNull()?.times(1000) ?: 0.0   // ← PLUS DE .toInt() → reste Double
-
-        val durationSeconds: Double = when {
-            footTime.contains("h") -> {
-                val parts = footTime.split("h", "min")
-                    .map { it.trim().filter { c -> c.isDigit() }.toIntOrNull() ?: 0 }
-                val hours = parts.getOrNull(0) ?: 0
-                val minutes = parts.getOrNull(1) ?: 0
-                (hours * 3600 + minutes * 60).toDouble()  // ← .toDouble()
-            }
-            footTime.contains("min") -> {
-                val minutes = footTime.replace("min", "").trim()
-                    .filter { it.isDigit() }.toIntOrNull() ?: 0
-                (minutes * 60).toDouble()  // ← .toDouble()
-            }
-            else -> 0.0
-        }
-
-        val itineraire = Itineraire(
-            pointDepart = Point(startLatLng!!.latitude, startLatLng!!.longitude),
-            pointArrivee = Point(endLatLng!!.latitude, endLatLng!!.longitude),
-            distance = distanceMeters,
-            duree_estimee = durationSeconds
-        )
-
-        // ✅ CORRECTION: Créer camping seulement si option activée ET données valides
-        val camping = if (includeCamping &&
-            campingName.isNotEmpty() &&
-            campingLocation.isNotEmpty() &&
-            campingStart.isNotEmpty() &&
-            campingEnd.isNotEmpty()) {
-            CampingData(
-                nom = campingName,
-                lieu = campingLocation,
-                prix = campingPrice.toDoubleOrNull() ?: 0.0,
-                dateDebut = campingStart,
-                dateFin = campingEnd
-            )
-        } else null
-
-        Log.d("CREATE_ADVENTURE", "Creating sortie:")
-        Log.d("CREATE_ADVENTURE", "Title: $title")
-        Log.d("CREATE_ADVENTURE", "Type: $activityType")
-        Log.d("CREATE_ADVENTURE", "Date: $date")
-        Log.d("CREATE_ADVENTURE", "Distance: $distanceMeters m")
-        Log.d("CREATE_ADVENTURE", "Duration: $durationSeconds s")
-        Log.d("CREATE_ADVENTURE", "Option Camping: $includeCamping")
-        Log.d("CREATE_ADVENTURE", "Camping Data: ${if (camping != null) "Présent" else "Absent"}")
-
         viewModelScope.launch {
             createResult = Result.Loading
-            createResult = repo.createSortie(
+
+            val userId = JwtHelper.getUserIdFromToken(token) ?: run {
+                createResult = Result.Error("⚠️ Invalid token")
+                return@launch
+            }
+
+            // Extract distance and duration
+            val distanceMeters = distance.replace(" km", "").replace(",", ".").toDoubleOrNull()?.times(1000) ?: 0.0
+            val durationSeconds = when {
+                activityType.contains("VELO") -> bikeTime
+                else -> footTime
+            }.let { time ->
+                val parts = time.split(" ")
+                var seconds = 0.0
+                parts.forEach { part ->
+                    when {
+                        part.contains("h") -> seconds += part.replace("h", "").toDoubleOrNull()?.times(3600) ?: 0.0
+                        part.contains("min") -> seconds += part.replace("min", "").toDoubleOrNull()?.times(60) ?: 0.0
+                    }
+                }
+                seconds
+            }
+
+            val itineraire = Itineraire(
+                pointDepart = Point(startLatLng!!.latitude, startLatLng!!.longitude),
+                pointArrivee = Point(endLatLng!!.latitude, endLatLng!!.longitude),
+                distance = distanceMeters,
+                duree_estimee = durationSeconds
+            )
+
+            val campingData = if (includeCamping && campingName.isNotEmpty()) {
+                CampingData(
+                    nom = campingName,
+                    lieu = campingLocation,
+                    prix = campingPrice.toDoubleOrNull() ?: 0.0,
+                    dateDebut = campingStart.ifEmpty { date },
+                    dateFin = campingEnd
+                )
+            } else null
+
+            Log.d("CREATE_ADVENTURE", "Creating sortie:")
+            Log.d("CREATE_ADVENTURE", "Title: $title")
+            Log.d("CREATE_ADVENTURE", "Type: $activityType")
+            Log.d("CREATE_ADVENTURE", "Date: $date")
+            Log.d("CREATE_ADVENTURE", "Distance: $distanceMeters m")
+            Log.d("CREATE_ADVENTURE", "Duration: $durationSeconds s")
+            Log.d("CREATE_ADVENTURE", "Option Camping: $includeCamping")
+            if (campingData != null) {
+                Log.d("CREATE_ADVENTURE", "Camping Data: Présent")
+            }
+
+            // ✅ FIX: Use 'repo' instead of 'repository'
+            val result = repo.createSortie(
                 token = token,
                 createurId = userId,
                 photoFile = photoFile,
@@ -267,20 +261,17 @@ class CreateAdventureViewModel : ViewModel() {
                 description = description,
                 date = date,
                 type = activityType,
-                optionCamping = includeCamping,  // ✅ Passer le booléen
-                lieu = startAddress,
+                optionCamping = includeCamping,
+                lieu = startAddress.ifEmpty { "Non spécifié" },
                 difficulte = "MOYEN",
                 niveau = "INTERMEDIAIRE",
-                capacite = capacity.toIntOrNull() ?: 0,
-                prix = 0.0, // ← c'est un Double, pas un Int
+                capacite = capacity.toIntOrNull() ?: 10,
+                prix = 0.0,
                 itineraire = itineraire,
-                camping = camping  // ✅ null si option_camping = false
+                camping = campingData
             )
 
-            if (createResult is Result.Success) {
-                delay(3000)
-                createResult = null
-            }
+            createResult = result
         }
     }
 

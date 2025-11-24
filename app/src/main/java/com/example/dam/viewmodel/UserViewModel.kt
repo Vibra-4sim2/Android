@@ -1,5 +1,7 @@
 package com.example.dam.viewmodel
 
+import android.content.Context
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.dam.models.UserProfileResponse
@@ -75,6 +77,43 @@ class UserViewModel : ViewModel() {
 
             when (result) {
                 is Result.Success -> {
+                    _currentUser.value = result.data
+                    onSuccess()
+                }
+                is Result.Error -> {
+                    _errorMessage.value = result.message
+                    onError(result.message)
+                }
+                Result.Loading -> {
+                    // Handle loading if needed
+                }
+            }
+        }
+    }
+
+    // Upload user avatar
+    fun uploadAvatar(
+        userId: String,
+        imageUri: Uri,
+        context: Context,
+        onSuccess: () -> Unit = {},
+        onError: (String) -> Unit = {}
+    ) {
+        _isLoading.value = true
+        _errorMessage.value = null
+
+        viewModelScope.launch {
+            val result = authRepository.uploadAvatar(
+                userId = userId,
+                imageUri = imageUri,
+                context = context
+            )
+
+            _isLoading.value = false
+
+            when (result) {
+                is Result.Success -> {
+                    // Update current user with new avatar
                     _currentUser.value = result.data
                     onSuccess()
                 }
