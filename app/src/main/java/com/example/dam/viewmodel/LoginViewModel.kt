@@ -1,8 +1,6 @@
 package com.example.dam.viewmodel
 
-// Fichier: app/src/main/java/com/example/dam/viewmodel/LoginViewModel.kt
-
-
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.dam.repository.AuthRepository
@@ -13,19 +11,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import android.util.Log
 
-
 /**
  * État de l'interface de login
  */
 data class LoginUiState(
-    val isLoading: Boolean = false,        // Est-ce qu'on charge ?
-    val error: String? = null,             // Message d'erreur s'il y en a
-    val accessToken: String? = null,       // Token JWT reçu
-    val isSuccess: Boolean = false         // Login réussi ?
-
-
-
-
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val accessToken: String? = null,
+    val isSuccess: Boolean = false
 )
 
 /**
@@ -36,24 +29,16 @@ class LoginViewModel(
     private val repository: AuthRepository = AuthRepository()
 ) : ViewModel() {
 
-
     private val TAG = "LoginViewModel"
 
-    // État privé modifiable
     private val _uiState = MutableStateFlow(LoginUiState())
-
-    // État public en lecture seule pour l'UI
     val uiState: StateFlow<LoginUiState> = _uiState.asStateFlow()
     private var _accessToken: String = ""
 
     /**
      * Fonction pour se connecter
-     *
-     * @param email Email saisi par l'utilisateur
-     * @param password Mot de passe saisi
      */
     fun login(email: String, password: String) {
-        // Vérifications basiques
         if (email.isBlank() || password.isBlank()) {
             _uiState.value = LoginUiState(
                 error = "Please fill all fields"
@@ -61,15 +46,11 @@ class LoginViewModel(
             return
         }
 
-        // Lancer l'appel API dans une coroutine
         viewModelScope.launch {
-            // 1. Afficher le loading
             _uiState.value = LoginUiState(isLoading = true)
 
-            // 2. Appeler le repository
             when (val result = repository.login(email, password)) {
                 is Result.Success -> {
-                    // ✅ Succès
                     _uiState.value = LoginUiState(
                         isLoading = false,
                         accessToken = result.data.accessToken,
@@ -78,7 +59,6 @@ class LoginViewModel(
                 }
 
                 is Result.Error -> {
-                    // ❌ Erreur
                     _uiState.value = LoginUiState(
                         isLoading = false,
                         error = result.message
@@ -86,21 +66,14 @@ class LoginViewModel(
                 }
 
                 is Result.Loading -> {
-                    // En chargement (normalement pas utilisé ici)
                     _uiState.value = LoginUiState(isLoading = true)
                 }
             }
         }
     }
 
-
-
-
-
-
-
     /**
-     * ✅ NOUVEAU: Authentification avec Google
+     * ✅ Authentification avec Google
      */
     fun googleSignIn(idToken: String) {
         viewModelScope.launch {
@@ -132,9 +105,38 @@ class LoginViewModel(
         }
     }
 
+    /**
+     * ✅ AJOUTÉ: Fonction de logout avec nettoyage du chat
+     */
+    fun logout(context: Context, chatViewModel: com.example.dam.viewmodel.ChatViewModel) {
+        Log.d(TAG, "========== LOGOUT ==========")
+        Log.d(TAG, "🔴 Starting logout process")
 
+        // ✅ 1. Nettoyer le chat et déconnecter le socket
+        chatViewModel.disconnect()
+        Log.d(TAG, "✅ Chat disconnected")
 
+        // ✅ 2. Supprimer les tokens
+        val sharedPref = context.getSharedPreferences("cycle_app_prefs", Context.MODE_PRIVATE)
+        val tokenBefore = sharedPref.getString("auth_token", null)
+        Log.d(TAG, "🔑 Token avant: ${tokenBefore?.take(20)}")
 
+        sharedPref.edit().apply {
+            remove("auth_token")
+            remove("user_id")
+            apply()
+        }
+
+        val tokenAfter = sharedPref.getString("auth_token", null)
+        Log.d(TAG, "🔑 Token après: $tokenAfter")
+
+        // ✅ 3. Réinitialiser l'état du ViewModel
+        _uiState.value = LoginUiState()
+        _accessToken = ""
+
+        Log.d(TAG, "✅ Logout complete")
+        Log.d(TAG, "============================")
+    }
 
     /**
      * Effacer le message d'erreur
@@ -150,20 +152,7 @@ class LoginViewModel(
         _uiState.value = LoginUiState()
     }
 
-
-    // Add this to your LoginViewModel class
     fun getAccessToken(): String {
         return _uiState.value.accessToken ?: ""
     }
 }
-
-/*
-COMMENT CRÉER CE FICHIER :
-1. Clic droit sur java/com/example/dam
-2. New → Package
-3. Nommez : viewmodel
-4. Clic droit sur viewmodel
-5. New → Kotlin Class/File
-6. Nommez : LoginViewModel
-7. Collez ce code
-*/

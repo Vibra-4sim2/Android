@@ -1,4 +1,3 @@
-// viewmodel/ChatViewModel.kt
 package com.example.dam.viewmodel
 
 import android.content.Context
@@ -12,205 +11,404 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Job
 import java.io.File
 
-/**
- * ViewModel pour gérer la conversation de chat avec Socket.IO
- */
 class ChatViewModel : ViewModel() {
 
     private val messageRepository = MessageRepository()
     private val TAG = "ChatViewModel"
 
-    // État de connexion Socket
     private val _isConnected = MutableStateFlow(false)
     val isConnected: StateFlow<Boolean> = _isConnected.asStateFlow()
 
-    // État de chargement
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    // État d'envoi de message
     private val _isSending = MutableStateFlow(false)
     val isSending: StateFlow<Boolean> = _isSending.asStateFlow()
 
-    // Liste des messages
     private val _messages = MutableStateFlow<List<MessageUI>>(emptyList())
     val messages: StateFlow<List<MessageUI>> = _messages.asStateFlow()
 
-    // Message d'erreur
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    // Utilisateurs en train de taper
+    private val _successMessage = MutableStateFlow<String?>(null)
+    val successMessage: StateFlow<String?> = _successMessage.asStateFlow()
+
     private val _typingUsers = MutableStateFlow<Set<String>>(emptySet())
     val typingUsers: StateFlow<Set<String>> = _typingUsers.asStateFlow()
 
-    // Current sortieId
     private var currentSortieId: String? = null
     private var currentUserId: String? = null
+    private var sendTimeoutJob: Job? = null
 
     init {
+        Log.d(TAG, "========================================")
+        Log.d(TAG, "🆕 ChatViewModel INIT - Instance créée")
+        Log.d(TAG, "   Timestamp: ${System.currentTimeMillis()}")
+        Log.d(TAG, "   HashCode: ${this.hashCode()}")
+        Log.d(TAG, "========================================")
         setupSocketListeners()
     }
 
-    /**
-     * Configure les listeners Socket.IO
-     */
     private fun setupSocketListeners() {
-        // Connexion établie
         SocketService.onConnected = {
             Log.d(TAG, "✅ Socket connected")
             _isConnected.value = true
             _errorMessage.value = null
+
+            currentSortieId?.let { sortieId ->
+                SocketService.joinRoom(sortieId)
+            }
         }
 
-        // Déconnexion
         SocketService.onDisconnected = {
             Log.d(TAG, "❌ Socket disconnected")
             _isConnected.value = false
         }
 
-        // Room rejointe avec messages initiaux
         SocketService.onJoinedRoom = { messages ->
-            Log.d(TAG, "🏠 Joined room, received ${messages.size} messages")
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "🏠 EVENT: joinedRoom - DIAGNOSTIC")
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "📨 Messages reçus: ${messages.size}")
+            Log.d(TAG, "🔍 État AVANT traitement joinedRoom:")
+            Log.d(TAG, "   isConnected: ${_isConnected.value}")
+            Log.d(TAG, "   isSending: ${_isSending.value} ⚠️")
+            Log.d(TAG, "   isLoading: ${_isLoading.value}")
+
+            // ✅ CORRECTION CRITIQUE: Mettre isConnected à true quand on a rejoint la room
+            _isConnected.value = true
             _isLoading.value = false
 
             currentUserId?.let { userId ->
                 val messagesUI = messages.map { it.toMessageUI(userId) }
-                _messages.value = messagesUI
+                _messages.value = messagesUI.sortedBy { it.timestamp }
+
+                Log.d(TAG, "📦 ${messagesUI.size} messages affichés")
             }
+
+            Log.d(TAG, "🔍 État APRÈS traitement joinedRoom:")
+            Log.d(TAG, "   isConnected: ${_isConnected.value} ✅ (maintenant TRUE)")
+            Log.d(TAG, "   isSending: ${_isSending.value} (devrait rester false)")
+            Log.d(TAG, "   isLoading: ${_isLoading.value} (devrait être false)")
+            Log.d(TAG, "========================================")
         }
 
-        // Nouveau message reçu
         SocketService.onMessageReceived = { message ->
-            Log.d(TAG, "📨 New message received: ${message.id}")
+            Log.d(TAG, "📨 New message received: ${message._id}")
 
             currentUserId?.let { userId ->
                 val messageUI = message.toMessageUI(userId)
-                _messages.value = _messages.value + messageUI
+
+                if (_messages.value.none { it.id == messageUI.id }) {
+                    _messages.value = (_messages.value + messageUI).sortedBy { it.timestamp }
+                    Log.d(TAG, "✅ Message added to list (total: ${_messages.value.size})")
+                }
             }
 
-            _isSending.value = false
+            // ⚠️ NE PAS modifier _isSending ici (supprimé si existait)
         }
 
-        // Utilisateur en train de taper
+        SocketService.onMessageSent = { messageId, success ->
+            Log.d(TAG, "✅ Message sent confirmation: $messageId (success: $success)")
+
+            sendTimeoutJob?.cancel()
+            sendTimeoutJob = null
+            _isSending.value = false
+
+            if (success) {
+                _successMessage.value = "Message envoyé"
+
+                viewModelScope.launch {
+                    val updatedMessages = _messages.value.map { msg ->
+                        if (msg.id == messageId) {
+                            msg.copy(status = MessageStatus.SENT)
+                        } else {
+                            msg
+                        }
+                    }
+                    _messages.value = updatedMessages
+                }
+            } else {
+                _errorMessage.value = "Échec de l'envoi"
+
+                viewModelScope.launch {
+                    val updatedMessages = _messages.value.map { msg ->
+                        if (msg.id == messageId) {
+                            msg.copy(status = MessageStatus.FAILED)
+                        } else {
+                            msg
+                        }
+                    }
+                    _messages.value = updatedMessages
+                }
+            }
+        }
+
         SocketService.onUserTyping = { userId, isTyping ->
             _typingUsers.value = if (isTyping) {
                 _typingUsers.value + userId
             } else {
                 _typingUsers.value - userId
             }
+
+            Log.d(TAG, "⌨️ Typing users: ${_typingUsers.value.size}")
         }
 
-        // Erreur
         SocketService.onError = { error ->
             Log.e(TAG, "⚠️ Socket error: $error")
             _errorMessage.value = error
             _isLoading.value = false
             _isSending.value = false
+            sendTimeoutJob?.cancel()
         }
     }
 
-    /**
-     * Se connecter au serveur Socket et rejoindre la room
-     * @param sortieId ID de la sortie
-     * @param context Context pour récupérer le token
-     */
     fun connectAndJoinRoom(sortieId: String, context: Context) {
         viewModelScope.launch {
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "🔌 DÉBUT CONNEXION CHAT - DIAGNOSTIC COMPLET")
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "📍 Paramètres:")
+            Log.d(TAG, "   sortieId demandé: $sortieId")
+            Log.d(TAG, "   currentSortieId actuel: $currentSortieId")
+            Log.d(TAG, "   Même sortie? ${sortieId == currentSortieId}")
+
+            Log.d(TAG, "🔍 État AVANT nettoyage:")
+            Log.d(TAG, "   isConnected: ${_isConnected.value}")
+            Log.d(TAG, "   isSending: ${_isSending.value} ⚠️ CRITIQUE")
+            Log.d(TAG, "   isLoading: ${_isLoading.value}")
+            Log.d(TAG, "   Socket.isConnected: ${SocketService.isConnected()}")
+            Log.d(TAG, "   errorMessage: ${_errorMessage.value}")
+            Log.d(TAG, "   successMessage: ${_successMessage.value}")
+            Log.d(TAG, "   sendTimeoutJob: ${if (sendTimeoutJob != null) "ACTIF ⚠️" else "null"}")
+            Log.d(TAG, "   messages: ${_messages.value.size}")
+
+            // ✅ NETTOYER COMPLÈTEMENT l'état précédent
+            Log.d(TAG, "🧹 Nettoyage de l'état...")
+            sendTimeoutJob?.cancel()
+            sendTimeoutJob = null
+
+            _isSending.value = false
             _isLoading.value = true
             _errorMessage.value = null
+            _successMessage.value = null
+            _typingUsers.value = emptySet()
+
+            Log.d(TAG, "🔍 État APRÈS nettoyage:")
+            Log.d(TAG, "   isSending: ${_isSending.value} (devrait être false)")
+            Log.d(TAG, "   isLoading: ${_isLoading.value} (devrait être true)")
+
+            // ⚠️ NE PAS réinitialiser _messages ici (on veut les garder)
+            // ⚠️ NE PAS réinitialiser _isConnected (le socket peut être déjà connecté)
 
             currentSortieId = sortieId
             currentUserId = getUserId(context)
 
             try {
+                Log.d(TAG, "👤 userId: $currentUserId")
+
                 val token = getToken(context)
                 if (token.isNullOrEmpty()) {
-                    _errorMessage.value = "Token non trouvé"
+                    Log.e(TAG, "❌ Token non trouvé!")
+                    _errorMessage.value = "Token non trouvé. Reconnectez-vous."
                     _isLoading.value = false
                     return@launch
                 }
 
+                Log.d(TAG, "🔑 Token: ${token.take(20)}...")
+
                 if (currentUserId.isNullOrEmpty()) {
+                    Log.e(TAG, "❌ ID utilisateur non trouvé!")
                     _errorMessage.value = "ID utilisateur non trouvé"
                     _isLoading.value = false
                     return@launch
                 }
 
-                Log.d(TAG, "🔌 Connecting to Socket for sortie: $sortieId")
-
-                // Se connecter au serveur Socket.IO
                 if (!SocketService.isConnected()) {
+                    Log.d(TAG, "🔌 Connexion au serveur Socket.IO...")
                     SocketService.connect(token)
-                    // Attendre un peu que la connexion s'établisse
-                    kotlinx.coroutines.delay(1000)
+
+                    var attempts = 0
+                    while (!SocketService.isConnected() && attempts < 30) {
+                        kotlinx.coroutines.delay(100)
+                        attempts++
+                        if (attempts % 10 == 0) {
+                            Log.d(TAG, "⏳ Tentative $attempts/30...")
+                        }
+                    }
+
+                    if (!SocketService.isConnected()) {
+                        Log.e(TAG, "❌ Échec de connexion après $attempts tentatives")
+                        _errorMessage.value = "Impossible de se connecter au serveur. Vérifiez votre connexion Internet."
+                        _isLoading.value = false
+                        return@launch
+                    }
+
+                    Log.d(TAG, "✅ Connexion Socket.IO établie!")
+                } else {
+                    Log.d(TAG, "✅ Socket déjà connecté")
+                    // ✅ CORRECTION: Synchroniser _isConnected avec l'état réel du socket
+                    _isConnected.value = true
+                    Log.d(TAG, "🔄 _isConnected forcé à true (socket déjà connecté)")
                 }
 
-                // Rejoindre la room du chat
+                Log.d(TAG, "🏠 Tentative de rejoindre la room: $sortieId")
+                Log.d(TAG, "🔍 État avant joinRoom:")
+                Log.d(TAG, "   _isConnected: ${_isConnected.value}")
+                Log.d(TAG, "   SocketService.isConnected(): ${SocketService.isConnected()}")
                 SocketService.joinRoom(sortieId)
 
+                Log.d(TAG, "✅ Demande de join envoyée, en attente de confirmation...")
+                Log.d(TAG, "========================================")
+
             } catch (e: Exception) {
-                Log.e(TAG, "💥 Exception: ${e.message}", e)
-                _errorMessage.value = "Erreur de connexion"
+                Log.e(TAG, "💥 Exception lors de la connexion", e)
+                Log.e(TAG, "Message: ${e.message}")
+                Log.e(TAG, "Stack trace: ${e.stackTraceToString()}")
+                _errorMessage.value = "Erreur de connexion: ${e.message}"
                 _isLoading.value = false
             }
         }
     }
 
-    /**
-     * Quitter la room et se déconnecter
-     */
     fun leaveRoom() {
+        Log.d(TAG, "========================================")
+        Log.d(TAG, "👋 LEAVE ROOM APPELÉ")
+        Log.d(TAG, "========================================")
+        Log.d(TAG, "📍 currentSortieId: $currentSortieId")
+        Log.d(TAG, "🔍 État AVANT leave:")
+        Log.d(TAG, "   isConnected: ${_isConnected.value}")
+        Log.d(TAG, "   isSending: ${_isSending.value}")
+        Log.d(TAG, "   isLoading: ${_isLoading.value}")
+        Log.d(TAG, "   messages: ${_messages.value.size}")
+        Log.d(TAG, "   errorMessage: ${_errorMessage.value}")
+        Log.d(TAG, "   sendTimeoutJob: ${if (sendTimeoutJob != null) "ACTIF" else "null"}")
+
         currentSortieId?.let { sortieId ->
-            Log.d(TAG, "👋 Leaving room: $sortieId")
+            // ✅ Nettoyer TOUT l'état au leave
+            sendTimeoutJob?.cancel()
+            sendTimeoutJob = null
+            _isSending.value = false
+            _isLoading.value = false
+            _errorMessage.value = null
+            _successMessage.value = null
+            _typingUsers.value = emptySet()
+
+            Log.d(TAG, "📤 Émission leaveRoom pour sortieId: $sortieId")
             SocketService.leaveRoom(sortieId)
-        }
+        } ?: Log.w(TAG, "⚠️ currentSortieId est NULL, pas de leaveRoom émis")
+
         currentSortieId = null
+
+        Log.d(TAG, "🔍 État APRÈS leave:")
+        Log.d(TAG, "   isConnected: ${_isConnected.value}")
+        Log.d(TAG, "   isSending: ${_isSending.value}")
+        Log.d(TAG, "   isLoading: ${_isLoading.value}")
+        Log.d(TAG, "   currentSortieId: $currentSortieId")
+        Log.d(TAG, "✅ LeaveRoom terminé")
+        Log.d(TAG, "========================================")
     }
 
     /**
-     * Envoie un message texte via Socket.IO
-     * @param sortieId ID de la sortie
-     * @param content Contenu du message
-     * @param context Context
+     * ✅ Déconnecter complètement (appelé au logout)
      */
-    fun sendTextMessage(sortieId: String, content: String, context: Context) {
-        if (content.isBlank()) return
+    fun disconnect() {
+        Log.d(TAG, "🔌 Disconnecting and resetting state")
 
-        if (!SocketService.isConnected()) {
-            _errorMessage.value = "Non connecté au serveur"
+        leaveRoom()
+        sendTimeoutJob?.cancel()
+        sendTimeoutJob = null
+
+        _isSending.value = false
+        _isLoading.value = false
+        _isConnected.value = false
+        _messages.value = emptyList()
+        _errorMessage.value = null
+        _successMessage.value = null
+        _typingUsers.value = emptySet()
+
+        SocketService.disconnect()
+
+        currentSortieId = null
+        currentUserId = null
+
+        Log.d(TAG, "✅ Disconnected and reset complete")
+    }
+
+    fun sendTextMessage(sortieId: String, content: String, context: Context) {
+        Log.d(TAG, "========================================")
+        Log.d(TAG, "📤 ENVOI MESSAGE TEXTE")
+        Log.d(TAG, "========================================")
+
+        if (content.isBlank()) {
+            Log.e(TAG, "❌ Message vide")
+            _errorMessage.value = "Le message ne peut pas être vide"
             return
         }
 
+        Log.d(TAG, "📍 sortieId: $sortieId")
+        Log.d(TAG, "💬 content: $content")
+        Log.d(TAG, "🔌 isConnected: ${SocketService.isConnected()}")
+        Log.d(TAG, "🔍 isSending avant: ${_isSending.value}")
+
+        if (!SocketService.isConnected()) {
+            Log.e(TAG, "❌ Non connecté au serveur!")
+            _errorMessage.value = "Non connecté au serveur. Veuillez vous reconnecter."
+            return
+        }
+
+        if (_isSending.value) {
+            Log.w(TAG, "⚠️ Envoi déjà en cours, message ignoré")
+            return
+        }
+
+        if (currentSortieId != sortieId) {
+            Log.w(TAG, "⚠️ Avertissement: sortieId différent du currentSortieId")
+            Log.w(TAG, "   sortieId envoyé: $sortieId")
+            Log.w(TAG, "   currentSortieId: $currentSortieId")
+        }
+
+        sendTimeoutJob?.cancel()
+
         _isSending.value = true
+        _errorMessage.value = null
+
+        Log.d(TAG, "🔍 isSending après: ${_isSending.value}")
 
         try {
-            Log.d(TAG, "📤 Sending text message: $content")
-
             val messageDto = CreateMessageDto(
                 type = MessageType.TEXT,
-                content = content
+                content = content.trim()
             )
 
+            Log.d(TAG, "📨 Emission du message via Socket.IO...")
             SocketService.sendMessage(sortieId, messageDto)
+            Log.d(TAG, "✅ Message émis, en attente de confirmation...")
 
-            // Note: Le message sera ajouté à la liste quand on recevra l'événement 'receiveMessage'
+            sendTimeoutJob = viewModelScope.launch {
+                kotlinx.coroutines.delay(10000)
+                if (_isSending.value) {
+                    Log.e(TAG, "⏱️ Timeout : aucune confirmation reçue après 10 secondes")
+                    _isSending.value = false
+                    _errorMessage.value = "Délai d'envoi dépassé. Le message a peut-être été envoyé."
+                }
+            }
+
+            Log.d(TAG, "========================================")
 
         } catch (e: Exception) {
-            Log.e(TAG, "💥 Exception: ${e.message}", e)
-            _errorMessage.value = "Erreur d'envoi"
+            Log.e(TAG, "💥 Exception lors de l'envoi", e)
+            Log.e(TAG, "Message: ${e.message}")
+            _errorMessage.value = "Erreur d'envoi: ${e.message}"
             _isSending.value = false
+            sendTimeoutJob?.cancel()
         }
     }
 
-    /**
-     * Upload une image puis l'envoie via Socket.IO
-     * @param sortieId ID de la sortie
-     * @param imageFile Fichier image
-     * @param context Context
-     */
     fun sendImageMessage(sortieId: String, imageFile: File, context: Context) {
         if (!SocketService.isConnected()) {
             _errorMessage.value = "Non connecté au serveur"
@@ -219,6 +417,7 @@ class ChatViewModel : ViewModel() {
 
         viewModelScope.launch {
             _isSending.value = true
+            _errorMessage.value = null
 
             try {
                 val token = getToken(context)
@@ -230,14 +429,12 @@ class ChatViewModel : ViewModel() {
 
                 Log.d(TAG, "📤 Uploading image: ${imageFile.name}")
 
-                // 1. Upload l'image via REST (car Socket.IO ne supporte pas les fichiers)
                 val uploadResult = messageRepository.uploadMedia(imageFile, "Bearer $token")
 
                 uploadResult.fold(
                     onSuccess = { uploadResponse ->
                         Log.d(TAG, "✅ Image uploaded: ${uploadResponse.url}")
 
-                        // 2. Envoyer le message avec l'URL via Socket.IO
                         val messageDto = CreateMessageDto(
                             type = MessageType.IMAGE,
                             mediaUrl = uploadResponse.url,
@@ -247,58 +444,45 @@ class ChatViewModel : ViewModel() {
                         )
 
                         SocketService.sendMessage(sortieId, messageDto)
+                        _successMessage.value = "Image envoyée"
                     },
                     onFailure = { error ->
                         Log.e(TAG, "❌ Error uploading image: ${error.message}")
-                        _errorMessage.value = "Échec de l'upload"
+                        _errorMessage.value = "Échec de l'upload: ${error.message}"
                         _isSending.value = false
                     }
                 )
             } catch (e: Exception) {
                 Log.e(TAG, "💥 Exception: ${e.message}", e)
-                _errorMessage.value = "Erreur d'envoi"
+                _errorMessage.value = "Erreur d'envoi: ${e.message}"
                 _isSending.value = false
             }
         }
     }
 
-    /**
-     * Envoyer l'indicateur de frappe
-     * @param sortieId ID de la sortie
-     * @param isTyping true si en train de taper
-     */
     fun sendTypingIndicator(sortieId: String, isTyping: Boolean) {
         if (SocketService.isConnected()) {
             SocketService.sendTypingIndicator(sortieId, isTyping)
         }
     }
 
-    /**
-     * Marquer un message comme lu
-     * @param messageId ID du message
-     * @param sortieId ID de la sortie
-     */
     fun markMessageAsRead(messageId: String, sortieId: String) {
         if (SocketService.isConnected()) {
             SocketService.markAsRead(messageId, sortieId)
         }
     }
 
-    /**
-     * Réinitialise l'erreur
-     */
     fun clearError() {
         _errorMessage.value = null
     }
 
-    /**
-     * Réinitialise les messages
-     */
+    fun clearSuccess() {
+        _successMessage.value = null
+    }
+
     fun resetMessages() {
         _messages.value = emptyList()
     }
-
-    // ========== HELPERS ==========
 
     private fun getToken(context: Context): String? {
         val sharedPref = context.getSharedPreferences("cycle_app_prefs", Context.MODE_PRIVATE)
@@ -312,7 +496,8 @@ class ChatViewModel : ViewModel() {
 
     override fun onCleared() {
         super.onCleared()
+        Log.d(TAG, "🧹 ViewModel cleared, leaving room")
+        sendTimeoutJob?.cancel()
         leaveRoom()
-        // Note: On ne déconnecte pas complètement pour permettre d'autres chats
     }
 }

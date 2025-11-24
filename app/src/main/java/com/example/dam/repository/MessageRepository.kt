@@ -72,7 +72,7 @@ class MessageRepository {
             val response = messageApi.sendMessage(sortieId, token, messageDto)
 
             if (response.isSuccessful && response.body() != null) {
-                Log.d(TAG, "Message sent successfully: ${response.body()!!.id}")
+                Log.d(TAG, "Message sent successfully: ${response.body()!!._id}")
                 Result.success(response.body()!!)
             } else {
                 val errorMsg = "Erreur: ${response.code()} - ${response.message()}"

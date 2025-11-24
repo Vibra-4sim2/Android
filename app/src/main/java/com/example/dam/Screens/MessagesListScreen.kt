@@ -296,8 +296,12 @@ fun MessagesListScreen(
                                 GroupChatItem(
                                     group = group,
                                     onClick = {
+                                        // ✅ Utiliser sortieId au lieu de group.id
+                                        val encodedGroupName = java.net.URLEncoder.encode(group.name, "UTF-8")
+                                        val encodedEmoji = java.net.URLEncoder.encode(group.emoji, "UTF-8")
+
                                         navController.navigate(
-                                            "chatConversation/${group.id}/${group.name}/${group.emoji}/${group.participantsCount}"
+                                            "chatConversation/${group.sortieId}/$encodedGroupName/$encodedEmoji/${group.participantsCount}"
                                         )
                                     }
                                 )

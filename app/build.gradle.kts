@@ -135,14 +135,14 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.5.0")
 
 
-    // Socket.IO pour Android
+    // Socket.IO client
     implementation("io.socket:socket.io-client:2.1.0")
 
-    // OkHttp (si pas déjà présent)
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // Gson (si pas déjà présent)
-    implementation("com.google.code.gson:gson:2.10.1")
+    // Jetpack Compose
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
 
 
 

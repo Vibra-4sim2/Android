@@ -15,8 +15,8 @@ object RetrofitInstance {
     // Pour émulateur Android Studio : 10.0.2.2
     // Pour appareil physique : l'IP de votre PC (ex: 192.168.1.5)
     // Pour trouver votre IP : cmd → ipconfig (Windows) ou ifconfig (Mac/Linux)
-    private const val BASE_URL = "http://10.0.2.2:3000/"
 
+    private const val BASE_URL = "http://10.0.2.2:3000/"
 //    private const val BASE_URL = "http://192.168.121.98:3000/"
 
 
