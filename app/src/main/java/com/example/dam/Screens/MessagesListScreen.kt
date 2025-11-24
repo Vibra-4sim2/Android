@@ -340,6 +340,22 @@ fun GroupChatItem(group: ChatGroupUI, onClick: () -> Unit) {
         )
     }
 
+    // ✅ État pour forcer le rafraîchissement du temps affiché
+    var refreshTrigger by remember { mutableStateOf(0) }
+
+    // ✅ Recalculer le temps toutes les 30 secondes
+    LaunchedEffect(group.timestamp) {
+        while (true) {
+            kotlinx.coroutines.delay(30_000) // 30 secondes
+            refreshTrigger++
+        }
+    }
+
+    // ✅ Calculer le temps en temps réel
+    val displayTime = remember(group.timestamp, refreshTrigger) {
+        group.timestamp?.let { com.example.dam.models.formatTime(it) } ?: group.time
+    }
+
     Surface(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
@@ -383,7 +399,7 @@ fun GroupChatItem(group: ChatGroupUI, onClick: () -> Unit) {
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        text = group.time,
+                        text = displayTime, // ✅ Utiliser le temps recalculé
                         color = TextTertiary,
                         fontSize = 12.sp
                     )
