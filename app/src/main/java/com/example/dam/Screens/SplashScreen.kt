@@ -82,7 +82,6 @@ fun SplashScreen(navController: NavController) {
     LaunchedEffect(Unit) {
         delay(2000)
 
-        // Vérifier l'état de l'utilisateur
         val isFirstLaunch = UserPreferences.isFirstLaunch(context)
         val token = UserPreferences.getToken(context)
         val isOnboardingComplete = UserPreferences.isOnboardingComplete(context)
@@ -93,27 +92,28 @@ fun SplashScreen(navController: NavController) {
         Log.d("SplashScreen", "isOnboardingComplete: $isOnboardingComplete")
 
         val destination = when {
-            // Cas 1 : Première utilisation → Onboarding
+            // Case 1: Very first app launch → Onboarding
             isFirstLaunch -> {
-                Log.d("SplashScreen", "🆕 Première utilisation → Onboarding")
+                Log.d("SplashScreen", "🆕 First launch → Onboarding")
                 "onboarding1"
             }
 
-            // Cas 2 : Token existe ET préférences complétées → Home directement
+            // Case 2: Has token AND completed onboarding before → Home
             token != null && isOnboardingComplete -> {
-                Log.d("SplashScreen", "✅ Utilisateur connecté → Home")
+                Log.d("SplashScreen", "✅ Returning user → Home")
                 "home"
             }
 
-            // Cas 3 : Token existe MAIS préférences pas complétées → Preferences
+            // Case 3: Has token BUT never completed preferences → Preferences
+            // (This is a NEW Google user who just signed in for first time)
             token != null && !isOnboardingComplete -> {
-                Log.d("SplashScreen", "⚠️ Token existe mais préférences incomplètes → Preferences")
+                Log.d("SplashScreen", "🆕 New Google user → Preferences")
                 "preferences"
             }
 
-            // Cas 4 : Pas de token (logout ou jamais connecté) → Login
+            // Case 4: No token → Login
             else -> {
-                Log.d("SplashScreen", "🔐 Pas de token → Login")
+                Log.d("SplashScreen", "🔐 No token → Login")
                 "login"
             }
         }
@@ -125,6 +125,8 @@ fun SplashScreen(navController: NavController) {
             popUpTo("splash") { inclusive = true }
         }
     }
+
+
 
     Box(
         modifier = Modifier

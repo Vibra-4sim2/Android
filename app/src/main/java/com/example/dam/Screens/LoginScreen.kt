@@ -105,13 +105,16 @@ fun LoginScreen(
     }
 
     // Navigation après login réussi (OPTION A – avec token)
+    // Navigation après login réussi
     LaunchedEffect(uiState.isSuccess) {
         if (uiState.isSuccess) {
             val token = viewModel.getAccessToken()
             if (token.isNotEmpty()) {
-                Log.d("LoginScreen", "Login réussi")
+                Log.d("LoginScreen", "========== LOGIN SUCCESS ==========")
+                Log.d("LoginScreen", "✅ Login réussi (normal ou Google)")
+                Log.d("LoginScreen", "🔑 Token: ${token.take(30)}...")
 
-                // ✅ GARDE ton code existant
+                // Sauvegarder les données
                 saveAuthData(context, token)
                 UserPreferences.saveToken(context, token)
 
@@ -121,11 +124,21 @@ fun LoginScreen(
                     clearSavedCredentials(context)
                 }
 
+                // ✅ VÉRIFIER si l'onboarding preferences est complété
                 val isOnboardingComplete = UserPreferences.isOnboardingComplete(context)
                 Log.d("LoginScreen", "Onboarding complete: $isOnboardingComplete")
 
-                // ✅ OPTION A: Naviguer vers CreateAdventure avec token
-                navController.navigate(NavigationRoutes.createAdventureRoute(token)) {
+                // ✅ NAVIGATION CONDITIONNELLE
+                val destination = if (isOnboardingComplete) {
+                    NavigationRoutes.HOME  // Home si onboarding déjà fait
+                } else {
+                    NavigationRoutes.PREFERENCES  // Preferences si premier login
+                }
+
+                Log.d("LoginScreen", "📍 Navigation vers: $destination")
+                Log.d("LoginScreen", "===================================")
+
+                navController.navigate(destination) {
                     popUpTo("login") { inclusive = true }
                 }
             }

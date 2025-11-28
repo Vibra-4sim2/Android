@@ -114,16 +114,20 @@ class AdventureRepository {
                 .addFormDataPart("titre", titre)
                 .addFormDataPart("description", description)
                 .addFormDataPart("date", date)
-                .addFormDataPart("type", type)  // ✅ CORRECTION: "type" pas "type_activite"
+
+                // ✅ FIX: Extract only the type without emoji
+                .addFormDataPart("type", type.split(" ")[0]) // "VELO" or "RANDONNEE"
+
                 .addFormDataPart("option_camping", optionCamping.toString())
-                .addFormDataPart("lieu", lieu.ifEmpty { "" })  // ✅ Peut être vide
-                .addFormDataPart("difficulte", difficulte)
-                .addFormDataPart("niveau", niveau)
+
+                // ✅ FIX: Provide default values if empty
+                .addFormDataPart("lieu", lieu.ifEmpty { "Non spécifié" })
+                .addFormDataPart("difficulte", difficulte.ifEmpty { "MOYEN" })
+                .addFormDataPart("niveau", niveau.ifEmpty { "INTERMEDIAIRE" })
                 .addFormDataPart("capacite", capacite.toString())
                 .addFormDataPart("prix", prix.toString())
-            // ✅ SUPPRIMÉ: "createur_id" (l'API l'extrait du token JWT)
 
-            // Itinéraire
+            // ✅ Itinéraire JSON
             val itineraireJson = JSONObject().apply {
                 put("pointDepart", JSONObject().apply {
                     put("latitude", itineraire.pointDepart.latitude)
@@ -139,9 +143,8 @@ class AdventureRepository {
 
             requestBody.addFormDataPart("itineraire", itineraireJson)
 
-            // ✅ CORRECTION: Logique conditionnelle du camping
+            // ✅ FIX: Only send camping if both conditions are true
             if (optionCamping && camping != null) {
-                // Si option_camping = true ET camping data existe
                 val campingJson = JSONObject().apply {
                     put("nom", camping.nom)
                     put("lieu", camping.lieu)
@@ -150,35 +153,35 @@ class AdventureRepository {
                     put("dateFin", camping.dateFin)
                 }.toString()
 
+                Log.d("CREATE_SORTIE", "Camping JSON: $campingJson")
                 requestBody.addFormDataPart("camping", campingJson)
-                // NE PAS envoyer campingId vide
-            } else {
-                // Si option_camping = false → ne rien envoyer
-                // L'API comprendra que camping = null
             }
 
-
-            // Photo
-            if (photoFile != null) {
+            // ✅ Photo (optional)
+            if (photoFile != null && photoFile.exists()) {
                 requestBody.addFormDataPart(
                     "photo",
                     photoFile.name,
                     photoFile.asRequestBody("image/jpeg".toMediaType())
                 )
-            } else {
-                requestBody.addFormDataPart("photo", "")
+                Log.d("CREATE_SORTIE", "Photo added: ${photoFile.name}")
             }
 
             val request = Request.Builder()
-                .url("$BASE_URL/sorties")  // ✅ CORRECTION: URL complète
+                .url("$BASE_URL/sorties")
                 .post(requestBody.build())
                 .addHeader("Authorization", "Bearer $token")
                 .addHeader("Accept", "*/*")
                 .build()
 
+            Log.d("CREATE_SORTIE", "========== REQUEST DEBUG ==========")
             Log.d("CREATE_SORTIE", "URL: $BASE_URL/sorties")
-            Log.d("CREATE_SORTIE", "Token: Bearer $token")
-            Log.d("CREATE_SORTIE", "Itineraire JSON: $itineraireJson")
+            Log.d("CREATE_SORTIE", "Token: Bearer ${token.take(30)}...")
+            Log.d("CREATE_SORTIE", "Titre: $titre")
+            Log.d("CREATE_SORTIE", "Type: ${type.split(" ")[0]}")
+            Log.d("CREATE_SORTIE", "Option Camping: $optionCamping")
+            Log.d("CREATE_SORTIE", "Itineraire: $itineraireJson")
+            Log.d("CREATE_SORTIE", "===================================")
 
             val response = client.newCall(request).execute()
             val body = response.body?.string() ?: ""
@@ -187,16 +190,15 @@ class AdventureRepository {
             Log.d("CREATE_SORTIE", "Response Body: $body")
 
             if (response.isSuccessful) {
-                Result.Success("Sortie créée avec succès !")
+                Result.Success("✅ Sortie créée avec succès !")
             } else {
-                Result.Error("Erreur ${response.code}: $body")
+                Result.Error("❌ Erreur ${response.code}: $body")
             }
         } catch (e: Exception) {
-            Log.e("CREATE_SORTIE", "Exception: ${e.message}", e)
+            Log.e("CREATE_SORTIE", "❌ Exception: ${e.message}", e)
             Result.Error("Erreur réseau: ${e.message}")
         }
     }
-
 
 // Add these functions at the bottom of AdventureRepository class
 

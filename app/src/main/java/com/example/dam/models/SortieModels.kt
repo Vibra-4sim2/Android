@@ -72,7 +72,10 @@ data class SortieResponse(
 
 data class CreateurInfo(
     @SerializedName("_id") val id: String,
-    @SerializedName("email") val email: String
+    @SerializedName("email") val email: String,
+    @SerializedName("firstName") val firstName: String? = null,
+    @SerializedName("lastName") val lastName: String? = null,
+    @SerializedName("avatar") val avatar: String? = null
 )
 
 data class CampingInfo(
@@ -96,4 +99,126 @@ data class ParticipantInfo(
     @SerializedName("userId") val userId: String?,
     @SerializedName("sortieId") val sortieId: String?,
     @SerializedName("status") val status: String?
+)
+
+
+
+// ============== PARTICIPATION MODELS ==============
+
+
+data class ParticipationRequest(
+    val sortieId: String
+)
+
+/**
+ * Request body for updating participation status
+ * PATCH /participations/{id}/status
+ */
+data class UpdateParticipationStatusRequest(
+    val status: String // "ACCEPTEE" or "REFUSEE"
+)
+
+/**
+ * ✅ FIXED: Simple participation response (returned after POST/PATCH operations)
+ * This is what you get when creating/updating - just ID strings
+ */
+data class SimpleParticipationResponse(
+    @SerializedName("_id")
+    val _id: String,
+
+    val userId: String, // ← Just string ID
+
+    val sortieId: String, // ← Just string ID
+
+    val status: String,
+
+    val createdAt: String,
+
+    val updatedAt: String,
+
+    @SerializedName("__v")
+    val version: Int = 0
+)
+
+/**
+ * ✅ FIXED: Full participation response with populated user and sortie data
+ * This is what you get from GET /participations?sortieId={id}
+ */
+data class ParticipationResponse(
+    @SerializedName("_id")
+    val _id: String,
+
+    val userId: UserInfo, // ← Object with email
+
+    val sortieId: SortieInfo, // ← Full sortie object
+
+    val status: String, // "EN_ATTENTE", "ACCEPTEE", "REFUSEE"
+
+    val createdAt: String,
+
+    val updatedAt: String,
+
+    @SerializedName("__v")
+    val version: Int = 0
+)
+
+/**
+ * Simplified user info within participation response
+ */
+data class UserInfo(
+    @SerializedName("_id")
+    val _id: String,
+
+    val email: String,
+
+    val name: String? = null // Optional if your API returns it
+)
+
+/**
+ * Simplified sortie info within participation response
+ * This matches the nested sortieId object in the API response
+ */
+data class SortieInfo(
+    @SerializedName("_id")
+    val _id: String,
+
+    val titre: String,
+
+    val description: String,
+
+    val difficulte: String,
+
+    val date: String,
+
+    val type: String,
+
+    @SerializedName("option_camping")
+    val optionCamping: Boolean,
+
+    val createurId: String,
+
+    val photo: String? = null,
+
+    val camping: String? = null,
+
+    val capacite: Int,
+
+    val itineraire: Itineraire? = null,
+
+    val participants: List<String> = emptyList(),
+
+    val createdAt: String,
+
+    val updatedAt: String,
+
+    @SerializedName("__v")
+    val version: Int = 0
+)
+
+/**
+ * Response when canceling participation
+ * DELETE /participations/{id}
+ */
+data class CancelParticipationResponse(
+    val message: String
 )
