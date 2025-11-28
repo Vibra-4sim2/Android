@@ -201,8 +201,6 @@ fun NavigationGraph(
         }
 
 
-
-
         composable(NavigationRoutes.EDIT_PROFILE) {
             EditProfile1Screen(navController = navController)
         }
@@ -248,15 +246,11 @@ fun NavigationGraph(
             )
         }
 
-
-
-        // ✅ AJOUTÉ: Route pour la liste des messages
         composable(NavigationRoutes.MESSAGES) {
             MessagesListScreen(navController = navController)
         }
 
-        // ✅ AJOUTÉ: Route pour la conversation de chat
-        // ✅ CORRECTION: Route pour la conversation de chat avec décodage
+        // ✅ CORRIGÉ: Route pour la conversation de chat
         composable(
             route = "chatConversation/{sortieId}/{groupName}/{groupEmoji}/{participantsCount}",
             arguments = listOf(
@@ -277,16 +271,12 @@ fun NavigationGraph(
 
             ChatConversationScreen(
                 navController = navController,
-                groupId = sortieId, // ✅ C'est le sortieId maintenant
+                sortieId = sortieId, // ✅ CORRIGÉ: utiliser sortieId au lieu de groupId
                 groupName = groupName,
                 groupEmoji = groupEmoji,
                 participantsCount = participantsCount
             )
         }
-
-
-
-
     }
 }
 // ✅ Routes mises à jour
@@ -306,28 +296,34 @@ object NavigationRoutes {
     const val FEED = "feed"
     const val ADD_PUB = "addpublication"
     const val SORTIE_DETAIL = "sortieDetail/{sortieId}"
+
+    // ← NEW: Accept token
     const val CREATE = "createadventure/{token}"
     const val USER_PROFILE = "userProfile/{userId}"
-    const val MESSAGES = "messages"  // ✅ AJOUTÉ
-
+    const val MESSAGES = "messages"
 
     // Helper functions
     fun createAdventureRoute(token: String) = "createadventure/$token"
     fun userProfileRoute(userId: String) = "userProfile/$userId"
     fun sortieDetailRoute(sortieId: String) = "sortieDetail/$sortieId"
-    // ✅ AJOUTÉ
+
+    // ✅ CORRIGÉ: Helper function avec encodage URL
     fun chatConversationRoute(
-        groupId: String,
+        sortieId: String,
         groupName: String,
         groupEmoji: String,
         participantsCount: String
-    ) = "chatConversation/$groupId/$groupName/$groupEmoji/$participantsCount"
+    ): String {
+        val encodedGroupName = java.net.URLEncoder.encode(groupName, "UTF-8")
+        val encodedEmoji = java.net.URLEncoder.encode(groupEmoji, "UTF-8")
+        return "chatConversation/$sortieId/$encodedGroupName/$encodedEmoji/$participantsCount"
+    }
 }
 
 @Preview(showBackground = true)
 @Composable
 fun AppPreview() {
     DamTheme {
-        CycleApp() // pas besoin de passer googleSignInClient ni activity
+        CycleApp()
     }
 }

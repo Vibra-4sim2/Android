@@ -33,12 +33,14 @@ import com.example.dam.models.MessageStatus
 import com.example.dam.models.MessageType
 import com.example.dam.models.MessageUI
 import com.example.dam.viewmodel.ChatViewModel
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
 fun ChatConversationScreen(
     navController: NavHostController,
-    groupId: String,
+    sortieId: String,
     groupName: String,
     groupEmoji: String,
     participantsCount: String,
@@ -50,34 +52,78 @@ fun ChatConversationScreen(
 
     // États du ViewModel
     val messages by viewModel.messages.collectAsState()
+    val isConnected by viewModel.isConnected.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
+    val successMessage by viewModel.successMessage.collectAsState()
+    val typingUsers by viewModel.typingUsers.collectAsState()
 
     // Liste state pour auto-scroll
     val listState = rememberLazyListState()
     val coroutineScope = rememberCoroutineScope()
 
-    // Charger les messages au démarrage
-//    LaunchedEffect(groupId) {
-//        viewModel.resetPagination()
-//        viewModel.loadMessages(groupId, context)
-//    }
+    // Job pour l'indicateur de frappe
+    var typingJob by remember { mutableStateOf<Job?>(null) }
 
-    // Auto-scroll quand un nouveau message arrive
+    // ✅ Se connecter et rejoindre la room au démarrage
+    LaunchedEffect(sortieId) {
+        android.util.Log.d("ChatConversationScreen", "========================================")
+        android.util.Log.d("ChatConversationScreen", "🚀 LaunchedEffect(sortieId) DÉCLENCHÉ")
+        android.util.Log.d("ChatConversationScreen", "📍 sortieId: $sortieId")
+        android.util.Log.d("ChatConversationScreen", "🔍 États UI actuels:")
+        android.util.Log.d("ChatConversationScreen", "   isConnected: $isConnected")
+        android.util.Log.d("ChatConversationScreen", "   isSending: $isSending")
+        android.util.Log.d("ChatConversationScreen", "   isLoading: $isLoading")
+        android.util.Log.d("ChatConversationScreen", "   messages count: ${messages.size}")
+        android.util.Log.d("ChatConversationScreen", "🔄 Appel de viewModel.connectAndJoinRoom()...")
+        android.util.Log.d("ChatConversationScreen", "========================================")
+        viewModel.connectAndJoinRoom(sortieId, context)
+    }
+
+    // ✅ Auto-scroll quand un nouveau message arrive (index 0 = bas avec reverseLayout)
     LaunchedEffect(messages.size) {
         if (messages.isNotEmpty()) {
-            coroutineScope.launch {
-                listState.animateScrollToItem(messages.size - 1)
-            }
+            listState.animateScrollToItem(0)
         }
     }
 
-    // Afficher les erreurs
+    // ✅ Afficher les erreurs avec Snackbar
+    val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
-            // TODO: Afficher un Snackbar avec l'erreur
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
             viewModel.clearError()
+        }
+    }
+
+    // ✅ Afficher les succès
+    LaunchedEffect(successMessage) {
+        successMessage?.let {
+            snackbarHostState.showSnackbar(
+                message = it,
+                duration = SnackbarDuration.Short
+            )
+            viewModel.clearSuccess()
+        }
+    }
+
+    // ✅ Cleanup: Quitter la room quand on quitte l'écran
+    DisposableEffect(Unit) {
+        android.util.Log.d("ChatConversationScreen", "========================================")
+        android.util.Log.d("ChatConversationScreen", "🎬 DisposableEffect CRÉÉ pour sortieId: $sortieId")
+        android.util.Log.d("ChatConversationScreen", "========================================")
+
+        onDispose {
+            android.util.Log.d("ChatConversationScreen", "========================================")
+            android.util.Log.d("ChatConversationScreen", "🚪 DisposableEffect onDispose APPELÉ")
+            android.util.Log.d("ChatConversationScreen", "📍 sortieId concerné: $sortieId")
+            android.util.Log.d("ChatConversationScreen", "🔄 Appel de viewModel.leaveRoom()...")
+            android.util.Log.d("ChatConversationScreen", "========================================")
+            viewModel.leaveRoom()
         }
     }
 
@@ -95,7 +141,7 @@ fun ChatConversationScreen(
             )
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
-            // Header
+            // ========== HEADER ==========
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = Color(0xFF1a3a2e),
@@ -140,11 +186,55 @@ fun ChatConversationScreen(
                             fontSize = 16.sp,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            text = "$participantsCount participants",
-                            color = Color.White.copy(alpha = 0.6f),
-                            fontSize = 12.sp
-                        )
+
+                        // ✅ CORRIGÉ: Afficher le bon statut
+                        when {
+                            // 1. Si des utilisateurs écrivent
+                            typingUsers.isNotEmpty() -> {
+                                Text(
+                                    text = "${typingUsers.size} personne(s) écrit...",
+                                    color = Color(0xFF25D366),
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                            // 2. Si NON connecté
+                            !isConnected -> {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(Color.Red, CircleShape)
+                                    )
+                                    Text(
+                                        text = "Connexion...",
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                            // 3. Si connecté (état normal) ✅
+                            else -> {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .background(Color(0xFF25D366), CircleShape)
+                                    )
+                                    Text(
+                                        text = "$participantsCount participants",
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        fontSize = 12.sp
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     IconButton(onClick = { /* Call */ }) {
@@ -173,7 +263,7 @@ fun ChatConversationScreen(
                 }
             }
 
-            // Messages List
+            // ========== MESSAGES LIST ==========
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -181,14 +271,52 @@ fun ChatConversationScreen(
             ) {
                 when {
                     isLoading && messages.isEmpty() -> {
-                        // Loading initial messages
-                        CircularProgressIndicator(
+                        // ✅ Loading initial messages
+                        Column(
                             modifier = Modifier.align(Alignment.Center),
-                            color = Color(0xFF25D366)
-                        )
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = Color(0xFF25D366)
+                            )
+                            Text(
+                                text = "Chargement des messages...",
+                                color = Color.White.copy(alpha = 0.6f),
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                    !isConnected && messages.isEmpty() -> {
+                        // ✅ Pas connecté
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Icon(
+                                Icons.Default.CloudOff,
+                                contentDescription = "Disconnected",
+                                tint = Color.White.copy(alpha = 0.3f),
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Non connecté",
+                                color = Color.White.copy(alpha = 0.5f),
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                text = "Vérifiez votre connexion internet",
+                                color = Color.White.copy(alpha = 0.3f),
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                     messages.isEmpty() -> {
-                        // Empty state
+                        // ✅ Empty state
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -216,15 +344,17 @@ fun ChatConversationScreen(
                         }
                     }
                     else -> {
+                        // ✅ Messages list
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(horizontal = 12.dp),
                             contentPadding = PaddingValues(vertical = 16.dp),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            reverseLayout = true
                         ) {
-                            items(messages) { message ->
+                            items(messages.reversed(), key = { it.id }) { message ->
                                 ChatMessageBubble(message)
                             }
                         }
@@ -232,18 +362,38 @@ fun ChatConversationScreen(
                 }
             }
 
-            // Attachment Options
+            // ========== ATTACHMENT OPTIONS ==========
             AnimatedVisibility(
                 visible = showAttachmentOptions,
                 enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
                 exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
             ) {
                 AttachmentOptionsPanel(
-                    onDismiss = { showAttachmentOptions = false }
+                    onDismiss = { showAttachmentOptions = false },
+                    onImageClick = {
+                        // TODO: Implémenter la sélection d'image
+                        showAttachmentOptions = false
+                    },
+                    onCameraClick = {
+                        // TODO: Implémenter la caméra
+                        showAttachmentOptions = false
+                    },
+                    onFileClick = {
+                        // TODO: Implémenter la sélection de fichier
+                        showAttachmentOptions = false
+                    },
+                    onAudioClick = {
+                        // TODO: Implémenter l'audio
+                        showAttachmentOptions = false
+                    },
+                    onLocationClick = {
+                        // TODO: Implémenter la localisation
+                        showAttachmentOptions = false
+                    }
                 )
             }
 
-            // Input Bar
+            // ========== INPUT BAR ==========
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 color = Color(0xFF1a3a2e),
@@ -264,11 +414,14 @@ fun ChatConversationScreen(
                             )
                         }
                     } else {
-                        IconButton(onClick = { showAttachmentOptions = true }) {
+                        IconButton(
+                            onClick = { showAttachmentOptions = true },
+                            enabled = isConnected
+                        ) {
                             Icon(
                                 Icons.Default.AttachFile,
                                 contentDescription = "Attach",
-                                tint = Color(0xFF25D366)
+                                tint = if (isConnected) Color(0xFF25D366) else Color.Gray
                             )
                         }
                     }
@@ -284,8 +437,31 @@ fun ChatConversationScreen(
                         ) {
                             BasicTextField(
                                 value = messageText,
-                                onValueChange = { messageText = it },
+                                onValueChange = { newValue ->
+                                    messageText = newValue
+
+                                    // ✅ Envoyer l'indicateur de frappe
+                                    if (isConnected) {
+                                        // Annuler le job précédent
+                                        typingJob?.cancel()
+
+                                        if (newValue.text.isNotEmpty()) {
+                                            // Envoyer isTyping = true
+                                            viewModel.sendTypingIndicator(sortieId, true)
+
+                                            // Après 2 secondes d'inactivité, envoyer isTyping = false
+                                            typingJob = coroutineScope.launch {
+                                                delay(2000)
+                                                viewModel.sendTypingIndicator(sortieId, false)
+                                            }
+                                        } else {
+                                            // Si le texte est vide, envoyer isTyping = false immédiatement
+                                            viewModel.sendTypingIndicator(sortieId, false)
+                                        }
+                                    }
+                                },
                                 modifier = Modifier.weight(1f),
+                                enabled = isConnected && !isSending,
                                 textStyle = TextStyle(
                                     color = Color.White,
                                     fontSize = 14.sp
@@ -294,7 +470,7 @@ fun ChatConversationScreen(
                                 decorationBox = { innerTextField ->
                                     if (messageText.text.isEmpty()) {
                                         Text(
-                                            text = "Votre message...",
+                                            text = if (isConnected) "Votre message..." else "Connexion...",
                                             color = Color.White.copy(alpha = 0.5f),
                                             fontSize = 14.sp
                                         )
@@ -304,12 +480,13 @@ fun ChatConversationScreen(
                             )
                             IconButton(
                                 onClick = { /* Emoji */ },
-                                modifier = Modifier.size(24.dp)
+                                modifier = Modifier.size(24.dp),
+                                enabled = isConnected
                             ) {
                                 Icon(
                                     Icons.Default.Mood,
                                     contentDescription = "Emoji",
-                                    tint = Color.White.copy(alpha = 0.5f),
+                                    tint = Color.White.copy(alpha = if (isConnected) 0.5f else 0.3f),
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
@@ -318,33 +495,65 @@ fun ChatConversationScreen(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
+                    // ✅ Bouton d'envoi amélioré
                     FloatingActionButton(
                         onClick = {
-                            if (messageText.text.isNotBlank()) {
-                                viewModel.sendTextMessage(groupId, messageText.text, context)
+                            if (messageText.text.isNotBlank() && isConnected && !isSending) {
+                                // Envoyer le message
+                                viewModel.sendTextMessage(sortieId, messageText.text.trim(), context)
+
+                                // Envoyer isTyping = false
+                                viewModel.sendTypingIndicator(sortieId, false)
+                                typingJob?.cancel()
+
+                                // Vider le champ
                                 messageText = TextFieldValue("")
                             }
                         },
-                        containerColor = Color(0xFF25D366),
+                        containerColor = if (isConnected) Color(0xFF25D366) else Color.Gray,
                         modifier = Modifier.size(48.dp),
                         shape = CircleShape
                     ) {
-                        if (isSending) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(24.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
-                            )
-                        } else {
-                            Icon(
-                                if (messageText.text.isEmpty()) Icons.Default.Mic else Icons.Default.Send,
-                                contentDescription = if (messageText.text.isEmpty()) "Voice" else "Send",
-                                tint = Color.White
-                            )
+                        when {
+                            isSending -> {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                            }
+                            messageText.text.isEmpty() -> {
+                                Icon(
+                                    Icons.Default.Mic,
+                                    contentDescription = "Voice",
+                                    tint = Color.White
+                                )
+                            }
+                            else -> {
+                                Icon(
+                                    Icons.Default.Send,
+                                    contentDescription = "Send",
+                                    tint = Color.White
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+
+        // ✅ Snackbar pour les messages d'erreur/succès
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 80.dp)
+        ) { snackbarData ->
+            Snackbar(
+                snackbarData = snackbarData,
+                containerColor = Color(0xFF2d4a3e),
+                contentColor = Color.White
+            )
         }
     }
 }
@@ -374,7 +583,7 @@ fun ChatMessageBubble(message: MessageUI) {
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = message.author.firstOrNull()?.toString() ?: "?",
+                        text = message.author.firstOrNull()?.uppercase() ?: "?",
                         color = Color.White,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold
@@ -388,7 +597,7 @@ fun ChatMessageBubble(message: MessageUI) {
             horizontalAlignment = if (message.isMe) Alignment.End else Alignment.Start,
             modifier = Modifier.widthIn(max = 280.dp)
         ) {
-            if (!message.isMe && message.content?.isNotEmpty() == true) {
+            if (!message.isMe) {
                 Text(
                     text = message.author,
                     color = Color(0xFF25D366),
@@ -408,7 +617,7 @@ fun ChatMessageBubble(message: MessageUI) {
                 color = if (message.isMe) Color(0xFF056162) else Color(0xFF2d4a3e)
             ) {
                 Column {
-                    // Image
+                    // ✅ Image
                     if (message.type == MessageType.IMAGE && message.imageUrl != null) {
                         AsyncImage(
                             model = message.imageUrl,
@@ -458,12 +667,18 @@ fun ChatMessageBubble(message: MessageUI) {
                                 )
                                 if (message.isMe) {
                                     Icon(
-                                        Icons.Default.DoneAll,
+                                        when (message.status) {
+                                            MessageStatus.SENDING -> Icons.Default.Schedule
+                                            MessageStatus.SENT -> Icons.Default.Done
+                                            MessageStatus.DELIVERED, MessageStatus.READ -> Icons.Default.DoneAll
+                                            MessageStatus.FAILED -> Icons.Default.Error
+                                        },
                                         contentDescription = "Status",
-                                        tint = if (message.status == MessageStatus.READ)
-                                            Color(0xFF53bdeb)
-                                        else
-                                            Color.White.copy(alpha = 0.6f),
+                                        tint = when (message.status) {
+                                            MessageStatus.READ -> Color(0xFF53bdeb)
+                                            MessageStatus.FAILED -> Color.Red
+                                            else -> Color.White.copy(alpha = 0.6f)
+                                        },
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
@@ -503,7 +718,14 @@ fun ChatMessageBubble(message: MessageUI) {
 }
 
 @Composable
-fun AttachmentOptionsPanel(onDismiss: () -> Unit) {
+fun AttachmentOptionsPanel(
+    onDismiss: () -> Unit,
+    onImageClick: () -> Unit,
+    onCameraClick: () -> Unit,
+    onFileClick: () -> Unit,
+    onAudioClick: () -> Unit,
+    onLocationClick: () -> Unit
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -525,25 +747,25 @@ fun AttachmentOptionsPanel(onDismiss: () -> Unit) {
                     icon = Icons.Default.Image,
                     label = "Image",
                     color = Color(0xFF9C27B0),
-                    onClick = { /* TODO: Handle Image */ }
+                    onClick = onImageClick
                 )
                 AttachmentOption(
                     icon = Icons.Default.CameraAlt,
                     label = "Caméra",
                     color = Color(0xFF2196F3),
-                    onClick = { /* TODO: Handle Camera */ }
+                    onClick = onCameraClick
                 )
                 AttachmentOption(
                     icon = Icons.Default.Description,
                     label = "Fichier",
                     color = Color(0xFFFF9800),
-                    onClick = { /* TODO: Handle File */ }
+                    onClick = onFileClick
                 )
                 AttachmentOption(
                     icon = Icons.Default.MusicNote,
                     label = "Audio",
                     color = Color(0xFFE91E63),
-                    onClick = { /* TODO: Handle Audio */ }
+                    onClick = onAudioClick
                 )
             }
 
@@ -559,7 +781,7 @@ fun AttachmentOptionsPanel(onDismiss: () -> Unit) {
                     icon = Icons.Default.LocationOn,
                     label = "Position",
                     color = Color(0xFF25D366),
-                    onClick = { /* TODO: Handle Location */ }
+                    onClick = onLocationClick
                 )
             }
         }

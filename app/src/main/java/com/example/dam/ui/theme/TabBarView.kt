@@ -1,6 +1,3 @@
-// ========== MISE À JOUR 1: TabBarView.kt ==========
-// Remplacez votre TabBarView.kt par ce code:
-
 package com.example.dam.ui.theme
 
 import android.util.Log
@@ -8,6 +5,7 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -18,13 +16,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -34,6 +35,8 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.dam.Screens.*
 import com.example.dam.utils.UserPreferences
+import com.example.dam.viewmodel.ChatViewModel
+import com.example.dam.viewmodel.LoginViewModel
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -44,27 +47,18 @@ fun TabBarView(
     var showOptions by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
+    // ✅ AJOUTÉ: ViewModels
+    val chatViewModel: ChatViewModel = viewModel()
+    val loginViewModel: LoginViewModel = viewModel()
+
     val internalNavController = rememberNavController()
     val navBackStackEntry by internalNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
-    // ✅ CHANGÉ: "Discussions" au lieu de "Map"
     val tabs = listOf("Home", "Discussions", "Add", "Community", "Profile")
     var selectedTab by remember { mutableStateOf(0) }
-//
-//    LaunchedEffect(currentRoute) {
-//        selectedTab = when {
-//            currentRoute == "home" -> 0
-//            currentRoute == "messages" -> 1  // ✅ CHANGÉ
-//            currentRoute == "add" -> 2
-//            currentRoute == "feed" -> 3
-//            currentRoute == "profile" -> 4
-//            currentRoute?.startsWith("sortieDetail") == true -> 0
-//            currentRoute?.startsWith("chatConversation") == true -> 1  // ✅ AJOUTÉ
-//            else -> selectedTab
-//        }
-//    }
 
+    // Update selected tab based on current route
     LaunchedEffect(currentRoute) {
         selectedTab = when (currentRoute) {
             "home" -> 0
@@ -75,8 +69,6 @@ fun TabBarView(
             else -> selectedTab // Garde l'onglet actuel (très important !)
         }
     }
-
-
 
     val rotation by animateFloatAsState(
         targetValue = if (showOptions) 180f else 0f,
@@ -113,11 +105,14 @@ fun TabBarView(
                 )
             )
     ) {
+        // Main Content
         Column(modifier = Modifier.fillMaxSize()) {
+            // Top Bar
             if (shouldShowBars) {
                 Spacer(modifier = Modifier.height(60.dp))
             }
 
+            // Content Area with Navigation
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -130,25 +125,24 @@ fun TabBarView(
                     composable("home") {
                         HomeExploreScreen(navController = navController)
                     }
-                    // ✅ CHANGÉ: Messages au lieu de Map
                     composable("messages") {
                         MessagesListScreen(navController = navController)
                     }
                     composable("add") {
                         val token = UserPreferences.getToken(context) ?: ""
                         CreateAdventureScreen(
-                            navController = navController,
+                            navController = internalNavController,
                             token = token
                         )
                     }
                     composable("feed") {
-                        FeedScreen(navController = navController)
+                        FeedScreen(navController = internalNavController)
                     }
                     composable("profile") {
-                        ProfileScreen(navController = navController)
+                        ProfileScreen(navController = internalNavController)
                     }
                     composable("edit_profile") {
-                        EditProfile1Screen(navController = navController)
+                        EditProfile1Screen(navController = internalNavController)
                     }
                     composable("addpublication") {
                         AddPublicationScreen(navController = navController)
@@ -167,24 +161,23 @@ fun TabBarView(
                             sortieId = sortieId
                         )
                     }
-                    // ✅ AJOUTÉ: Route pour la conversation
                     composable(
-                        route = "chatConversation/{groupId}/{groupName}/{groupEmoji}/{participantsCount}",
+                        route = "chatConversation/{sortieId}/{groupName}/{groupEmoji}/{participantsCount}",
                         arguments = listOf(
-                            navArgument("groupId") { type = NavType.StringType },
+                            navArgument("sortieId") { type = NavType.StringType },
                             navArgument("groupName") { type = NavType.StringType },
                             navArgument("groupEmoji") { type = NavType.StringType },
                             navArgument("participantsCount") { type = NavType.StringType }
                         )
                     ) { backStackEntry ->
-                        val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+                        val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
                         val groupName = backStackEntry.arguments?.getString("groupName") ?: ""
                         val groupEmoji = backStackEntry.arguments?.getString("groupEmoji") ?: ""
                         val participantsCount = backStackEntry.arguments?.getString("participantsCount") ?: "0"
 
                         ChatConversationScreen(
                             navController = navController,
-                            groupId = groupId,
+                            sortieId = sortieId,
                             groupName = groupName,
                             groupEmoji = groupEmoji,
                             participantsCount = participantsCount
@@ -194,6 +187,7 @@ fun TabBarView(
             }
         }
 
+        // Top Bar with Dropdown
         if (shouldShowBars) {
             Column(
                 modifier = Modifier
@@ -201,6 +195,7 @@ fun TabBarView(
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
             ) {
+                // Top Bar - Glass Design
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = BackgroundGradientStart
@@ -262,6 +257,7 @@ fun TabBarView(
                     }
                 }
 
+                // Dropdown Menu
                 AnimatedVisibility(
                     visible = showOptions,
                     enter = slideInVertically(
@@ -284,6 +280,7 @@ fun TabBarView(
             }
         }
 
+        // Glass Bottom Navigation Bar
         if (shouldShowBars) {
             Box(
                 modifier = Modifier
@@ -328,6 +325,7 @@ fun TabBarView(
         }
     }
 
+    // Logout Dialog
     if (showLogoutDialog) {
         AlertDialog(
             onDismissRequest = { showLogoutDialog = false },
@@ -348,13 +346,8 @@ fun TabBarView(
             confirmButton = {
                 Button(
                     onClick = {
-                        Log.d("TabBarView", "========== LOGOUT ==========")
-                        Log.d("TabBarView", "Token avant: ${UserPreferences.getToken(context)?.take(20)}")
-
-                        UserPreferences.clear(context)
-
-                        Log.d("TabBarView", "Token après: ${UserPreferences.getToken(context)}")
-                        Log.d("TabBarView", "============================")
+                        // ✅ CORRIGÉ: Appeler la fonction logout du LoginViewModel
+                        loginViewModel.logout(context, chatViewModel)
 
                         showLogoutDialog = false
 
@@ -470,6 +463,7 @@ fun GlassBottomNav(
     onTabSelected: (Int) -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
+        // Glow effect
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -488,6 +482,7 @@ fun GlassBottomNav(
                 .blur(12.dp)
         )
 
+        // Glass navbar
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(35.dp),
@@ -529,6 +524,7 @@ fun GlassBottomNav(
                                     .blur(8.dp)
                             )
 
+                            // Button
                             Surface(
                                 onClick = { onTabSelected(index) },
                                 shape = CircleShape,
@@ -557,6 +553,7 @@ fun GlassBottomNav(
                             }
                         }
                     } else {
+                        // Regular Tab
                         Surface(
                             onClick = { onTabSelected(index) },
                             shape = RoundedCornerShape(20.dp),
