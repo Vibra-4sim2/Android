@@ -88,6 +88,9 @@ class ChatViewModel : ViewModel() {
                 _messages.value = messagesUI.sortedBy { it.timestamp }
 
                 Log.d(TAG, "📦 ${messagesUI.size} messages affichés")
+
+                // ✅ NOUVEAU: Marquer tous les messages non lus comme lus
+                markAllMessagesAsRead()
             }
 
             Log.d(TAG, "🔍 État APRÈS traitement joinedRoom:")
@@ -232,23 +235,25 @@ class ChatViewModel : ViewModel() {
                     Log.d(TAG, "🔌 Connexion au serveur Socket.IO...")
                     SocketService.connect(token)
 
+                    // ✅ CORRECTION: Augmentation à 60 secondes pour Render cold start
                     var attempts = 0
-                    while (!SocketService.isConnected() && attempts < 30) {
-                        kotlinx.coroutines.delay(100)
+                    val maxAttempts = 120 // 120 * 500ms = 60 secondes
+                    while (!SocketService.isConnected() && attempts < maxAttempts) {
+                        kotlinx.coroutines.delay(500)
                         attempts++
                         if (attempts % 10 == 0) {
-                            Log.d(TAG, "⏳ Tentative $attempts/30...")
+                            Log.d(TAG, "⏳ Tentative $attempts/$maxAttempts... (${attempts * 500 / 1000}s)")
                         }
                     }
 
                     if (!SocketService.isConnected()) {
-                        Log.e(TAG, "❌ Échec de connexion après $attempts tentatives")
-                        _errorMessage.value = "Impossible de se connecter au serveur. Vérifiez votre connexion Internet."
+                        Log.e(TAG, "❌ Échec de connexion après $attempts tentatives (${attempts * 500 / 1000}s)")
+                        _errorMessage.value = "Impossible de se connecter au serveur. Le serveur met du temps à démarrer (Render cold start). Veuillez réessayer."
                         _isLoading.value = false
                         return@launch
                     }
 
-                    Log.d(TAG, "✅ Connexion Socket.IO établie!")
+                    Log.d(TAG, "✅ Connexion Socket.IO établie après ${attempts * 500 / 1000}s!")
                 } else {
                     Log.d(TAG, "✅ Socket déjà connecté")
                     // ✅ CORRECTION: Synchroniser _isConnected avec l'état réel du socket
@@ -460,6 +465,61 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    /**
+     * ✅ NOUVEAU: Envoyer un message audio (vocal)
+     */
+    fun sendAudioMessage(sortieId: String, audioFile: File, durationSeconds: Int, context: Context) {
+        if (!SocketService.isConnected()) {
+            _errorMessage.value = "Non connecté au serveur"
+            return
+        }
+
+        viewModelScope.launch {
+            _isSending.value = true
+            _errorMessage.value = null
+
+            try {
+                val token = getToken(context)
+                if (token.isNullOrEmpty()) {
+                    _errorMessage.value = "Token non trouvé"
+                    _isSending.value = false
+                    return@launch
+                }
+
+                Log.d(TAG, "🎤 Uploading audio: ${audioFile.name} (${durationSeconds}s)")
+
+                val uploadResult = messageRepository.uploadMedia(audioFile, "Bearer $token")
+
+                uploadResult.fold(
+                    onSuccess = { uploadResponse ->
+                        Log.d(TAG, "✅ Audio uploaded: ${uploadResponse.url}")
+
+                        val messageDto = CreateMessageDto(
+                            type = MessageType.AUDIO,
+                            mediaUrl = uploadResponse.url,
+                            mediaDuration = durationSeconds.toDouble(),
+                            fileName = uploadResponse.originalName,
+                            fileSize = uploadResponse.size,
+                            mimeType = uploadResponse.mimeType
+                        )
+
+                        SocketService.sendMessage(sortieId, messageDto)
+                        _successMessage.value = "Message vocal envoyé"
+                    },
+                    onFailure = { error ->
+                        Log.e(TAG, "❌ Error uploading audio: ${error.message}")
+                        _errorMessage.value = "Échec de l'upload audio: ${error.message}"
+                        _isSending.value = false
+                    }
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "💥 Exception: ${e.message}", e)
+                _errorMessage.value = "Erreur d'envoi audio: ${e.message}"
+                _isSending.value = false
+            }
+        }
+    }
+
     fun sendTypingIndicator(sortieId: String, isTyping: Boolean) {
         if (SocketService.isConnected()) {
             SocketService.sendTypingIndicator(sortieId, isTyping)
@@ -472,12 +532,47 @@ class ChatViewModel : ViewModel() {
         }
     }
 
+    /**
+     * ✅ NOUVEAU: Marquer tous les messages non lus comme lus
+     */
+    private fun markAllMessagesAsRead() {
+        viewModelScope.launch {
+            try {
+                currentUserId?.let { userId ->
+                    // Trouver tous les messages qui ne sont pas "read" par l'utilisateur courant
+                    val unreadMessages = _messages.value.filter { message ->
+                        !message.isMe && message.status != MessageStatus.READ
+                    }
+
+                    Log.d(TAG, "📖 Marquage de ${unreadMessages.size} messages comme lus")
+
+                    // Marquer chaque message comme lu via WebSocket
+                    unreadMessages.forEach { message ->
+                        currentSortieId?.let { sortieId ->
+                            SocketService.markAsRead(message.id, sortieId)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Erreur marquage messages lus: ${e.message}")
+            }
+        }
+    }
+
     fun clearError() {
         _errorMessage.value = null
     }
 
     fun clearSuccess() {
         _successMessage.value = null
+    }
+
+    fun showError(message: String) {
+        _errorMessage.value = message
+    }
+
+    fun showSuccess(message: String) {
+        _successMessage.value = message
     }
 
     fun resetMessages() {

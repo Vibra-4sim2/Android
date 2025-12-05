@@ -8,14 +8,12 @@ import com.example.dam.remote.OpenRouteServiceInstance
 import com.example.dam.remote.RetrofitInstance
 import com.example.dam.utils.Result
 import com.google.android.gms.maps.model.LatLng
-import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.MultipartBody
-import okhttp3.OkHttpClient
-import okhttp3.Request
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 import java.io.File
 import kotlin.math.roundToInt
@@ -25,13 +23,11 @@ class AdventureRepository {
     private val directions = GoogleRetrofitInstance.directionsApi
     private val geocode = GoogleRetrofitInstance.geocodingApi
     private val key = GoogleRetrofitInstance.getApiKey()
-    private val gson = Gson()
     private val orsApi = OpenRouteServiceInstance.api
-    private val client = OkHttpClient()
 
-    companion object {
-        private const val BASE_URL = "http://10.0.2.2:3000"  // ✅ Sans le slash final
-    }
+    // ❌ SUPPRIMÉ : private val client = OkHttpClient()
+    // ❌ SUPPRIMÉ : companion object { BASE_URL }
+    // ✅ On utilise maintenant RetrofitInstance.adventureApi qui a déjà la bonne URL
 
     suspend fun reverseGeocode(latLng: LatLng): String {
         return try {
@@ -79,7 +75,6 @@ class AdventureRepository {
         Result.Error("Erreur réseau: ${e.message}")
     }
 
-
     suspend fun geocodeAddress(address: String): LatLng? {
         return try {
             val result = geocode.geocodeAddress(address, key)
@@ -91,6 +86,9 @@ class AdventureRepository {
         }
     }
 
+    /**
+     * ✅ VERSION CORRIGÉE : Utilise Retrofit API au lieu de OkHttpClient manuel
+     */
     suspend fun createSortie(
         token: String,
         createurId: String,
@@ -109,23 +107,8 @@ class AdventureRepository {
         camping: CampingData?
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
-            val requestBody = MultipartBody.Builder()
-                .setType(MultipartBody.FORM)
-                .addFormDataPart("titre", titre)
-                .addFormDataPart("description", description)
-                .addFormDataPart("date", date)
-
-                // ✅ FIX: Extract only the type without emoji
-                .addFormDataPart("type", type.split(" ")[0]) // "VELO" or "RANDONNEE"
-
-                .addFormDataPart("option_camping", optionCamping.toString())
-
-                // ✅ FIX: Provide default values if empty
-                .addFormDataPart("lieu", lieu.ifEmpty { "Non spécifié" })
-                .addFormDataPart("difficulte", difficulte.ifEmpty { "MOYEN" })
-                .addFormDataPart("niveau", niveau.ifEmpty { "INTERMEDIAIRE" })
-                .addFormDataPart("capacite", capacite.toString())
-                .addFormDataPart("prix", prix.toString())
+            // ✅ Extraire le type sans emoji
+            val cleanType = type.split(" ")[0] // "VELO" ou "RANDONNEE"
 
             // ✅ Itinéraire JSON
             val itineraireJson = JSONObject().apply {
@@ -141,66 +124,70 @@ class AdventureRepository {
                 put("duree_estimee", itineraire.duree_estimee)
             }.toString()
 
-            requestBody.addFormDataPart("itineraire", itineraireJson)
-
-            // ✅ FIX: Only send camping if both conditions are true
-            if (optionCamping && camping != null) {
-                val campingJson = JSONObject().apply {
+            // ✅ Camping JSON (seulement si activé ET données fournies)
+            val campingJson = if (optionCamping && camping != null) {
+                JSONObject().apply {
                     put("nom", camping.nom)
                     put("lieu", camping.lieu)
                     put("prix", camping.prix)
                     put("dateDebut", camping.dateDebut)
                     put("dateFin", camping.dateFin)
                 }.toString()
+            } else null
 
-                Log.d("CREATE_SORTIE", "Camping JSON: $campingJson")
-                requestBody.addFormDataPart("camping", campingJson)
-            }
-
-            // ✅ Photo (optional)
-            if (photoFile != null && photoFile.exists()) {
-                requestBody.addFormDataPart(
+            // ✅ Photo (optionnelle)
+            val photoPart = photoFile?.let {
+                MultipartBody.Part.createFormData(
                     "photo",
-                    photoFile.name,
-                    photoFile.asRequestBody("image/jpeg".toMediaType())
+                    it.name,
+                    it.asRequestBody("image/jpeg".toMediaType())
                 )
-                Log.d("CREATE_SORTIE", "Photo added: ${photoFile.name}")
             }
-
-            val request = Request.Builder()
-                .url("$BASE_URL/sorties")
-                .post(requestBody.build())
-                .addHeader("Authorization", "Bearer $token")
-                .addHeader("Accept", "*/*")
-                .build()
 
             Log.d("CREATE_SORTIE", "========== REQUEST DEBUG ==========")
-            Log.d("CREATE_SORTIE", "URL: $BASE_URL/sorties")
             Log.d("CREATE_SORTIE", "Token: Bearer ${token.take(30)}...")
             Log.d("CREATE_SORTIE", "Titre: $titre")
-            Log.d("CREATE_SORTIE", "Type: ${type.split(" ")[0]}")
+            Log.d("CREATE_SORTIE", "Type: $cleanType")
             Log.d("CREATE_SORTIE", "Option Camping: $optionCamping")
             Log.d("CREATE_SORTIE", "Itineraire: $itineraireJson")
+            if (campingJson != null) {
+                Log.d("CREATE_SORTIE", "Camping: $campingJson")
+            }
             Log.d("CREATE_SORTIE", "===================================")
 
-            val response = client.newCall(request).execute()
-            val body = response.body?.string() ?: ""
+            // ✅ UTILISATION DE RETROFIT API (pas de OkHttpClient manuel !)
+            val response = api.createSortie(
+                token = "Bearer $token",
+                photo = photoPart,
+                titre = titre.toRequestBody("text/plain".toMediaType()),
+                description = description.toRequestBody("text/plain".toMediaType()),
+                date = date.toRequestBody("text/plain".toMediaType()),
+                type = cleanType.toRequestBody("text/plain".toMediaType()),
+                optionCamping = optionCamping.toString().toRequestBody("text/plain".toMediaType()),
+                lieu = lieu.ifEmpty { "Non spécifié" }.toRequestBody("text/plain".toMediaType()),
+                difficulte = difficulte.ifEmpty { "MOYEN" }.toRequestBody("text/plain".toMediaType()),
+                niveau = niveau.ifEmpty { "INTERMEDIAIRE" }.toRequestBody("text/plain".toMediaType()),
+                capacite = capacite.toString().toRequestBody("text/plain".toMediaType()),
+                prix = prix.toString().toRequestBody("text/plain".toMediaType()),
+                itineraire = itineraireJson.toRequestBody("application/json".toMediaType()),
+                camping = campingJson?.toRequestBody("application/json".toMediaType())
+            )
 
-            Log.d("CREATE_SORTIE", "Response Code: ${response.code}")
-            Log.d("CREATE_SORTIE", "Response Body: $body")
+            Log.d("CREATE_SORTIE", "Response Code: ${response.code()}")
+            Log.d("CREATE_SORTIE", "Response Body: ${response.body()}")
 
             if (response.isSuccessful) {
                 Result.Success("✅ Sortie créée avec succès !")
             } else {
-                Result.Error("❌ Erreur ${response.code}: $body")
+                val errorBody = response.errorBody()?.string() ?: "Erreur inconnue"
+                Log.e("CREATE_SORTIE", "Error: $errorBody")
+                Result.Error("❌ Erreur ${response.code()}: $errorBody")
             }
         } catch (e: Exception) {
             Log.e("CREATE_SORTIE", "❌ Exception: ${e.message}", e)
             Result.Error("Erreur réseau: ${e.message}")
         }
     }
-
-// Add these functions at the bottom of AdventureRepository class
 
     suspend fun getAllSorties(): Result<List<SortieResponse>> = withContext(Dispatchers.IO) {
         try {
@@ -227,6 +214,37 @@ class AdventureRepository {
         } catch (e: Exception) {
             Log.e("GET_SORTIE_DETAIL", "Exception: ${e.message}", e)
             Result.Error("Erreur réseau: ${e.message}")
+        }
+    }
+
+
+
+
+    suspend fun getRecommendationsForUser(
+        userId: String,
+        token: String
+    ): Result<RecommendationsResponse> = withContext(Dispatchers.IO) {
+        try {
+            Log.d("RECOMMENDATIONS", "Fetching recommendations for user: $userId")
+
+            val response = api.getRecommendationsForUser(
+                userId = userId,
+                token = "Bearer $token"
+            )
+
+            if (response.isSuccessful && response.body() != null) {
+                val recommendations = response.body()!!
+                Log.d("RECOMMENDATIONS", "✅ Loaded ${recommendations.recommendations.size} recommendations")
+                Log.d("RECOMMENDATIONS", "User cluster: ${recommendations.userCluster}")
+                Result.Success(recommendations)
+            } else {
+                val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                Log.e("RECOMMENDATIONS", "❌ Error ${response.code()}: $errorBody")
+                Result.Error("Error ${response.code()}: $errorBody")
+            }
+        } catch (e: Exception) {
+            Log.e("RECOMMENDATIONS", "❌ Exception: ${e.message}", e)
+            Result.Error("Network error: ${e.message}")
         }
     }
 }

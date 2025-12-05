@@ -18,7 +18,8 @@ object SocketService {
 
     private const val TAG = "SocketService"
 
-    private const val BASE_URL = "http://10.0.2.2:3000"
+    // ✅ CORRIGÉ: URL du serveur déployé sur Render
+    private const val BASE_URL = "https://dam-4sim2.onrender.com"
     private const val SOCKET_NAMESPACE = "/chat"
 
     private var socket: Socket? = null
@@ -53,12 +54,13 @@ object SocketService {
             val options = IO.Options().apply {
                 auth = mapOf("token" to token)
                 reconnection = true
-                reconnectionAttempts = 5
-                reconnectionDelay = 1000
-                reconnectionDelayMax = 5000
-                transports = arrayOf("websocket")
-                timeout = 10000
+                reconnectionAttempts = 10
+                reconnectionDelay = 2000
+                reconnectionDelayMax = 10000
+                transports = arrayOf("websocket", "polling") // ✅ Ajout du polling comme fallback
+                timeout = 30000 // ✅ Augmenté à 30 secondes pour Render (cold start)
                 forceNew = false
+                secure = true // ✅ Pour HTTPS
             }
 
             socket = IO.socket(socketUrl, options)
@@ -222,12 +224,29 @@ object SocketService {
 
     private val onConnectError = Emitter.Listener { args ->
         val error = args.getOrNull(0)
-        Log.e(TAG, "💥 Connection error: $error")
+        val errorType = error?.javaClass?.simpleName ?: "Unknown"
+        val errorMsg = error?.toString() ?: "Unknown error"
 
-        if (error.toString().contains("Authentication")) {
-            onError?.invoke("Erreur d'authentification. Reconnectez-vous.")
-        } else {
-            onError?.invoke("Erreur de connexion: $error")
+        Log.e(TAG, "========================================")
+        Log.e(TAG, "💥 SOCKET CONNECTION ERROR")
+        Log.e(TAG, "========================================")
+        Log.e(TAG, "Type: $errorType")
+        Log.e(TAG, "Message: $errorMsg")
+        Log.e(TAG, "========================================")
+
+        when {
+            errorMsg.contains("timeout", ignoreCase = true) -> {
+                onError?.invoke("Erreur de connexion: timeout. Le serveur met du temps à répondre (cold start possible).")
+            }
+            errorMsg.contains("Authentication", ignoreCase = true) -> {
+                onError?.invoke("Erreur d'authentification. Reconnectez-vous.")
+            }
+            errorMsg.contains("ECONNREFUSED", ignoreCase = true) -> {
+                onError?.invoke("Erreur de connexion: serveur inaccessible.")
+            }
+            else -> {
+                onError?.invoke("Erreur de connexion: $errorMsg")
+            }
         }
     }
 

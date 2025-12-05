@@ -70,13 +70,34 @@ fun ChatResponse.toChatGroupUI(currentUserId: String): ChatGroupUI {
         ""
     }
 
-    // Formater le temps (simplifié - à adapter selon tes besoins)
+    // ✅ CORRIGÉ: Formater le contenu du dernier message selon son type
+    val lastMessageContent = if (lastMessage != null) {
+        when (lastMessage.type.lowercase()) {
+            "image" -> "📷 Photo"
+            "audio" -> "🎤 Message vocal"
+            "video" -> "🎥 Vidéo"
+            "location" -> "📍 Position"
+            "file" -> "📎 Fichier"
+            else -> lastMessage.content ?: "Aucun message"
+        }
+    } else {
+        "Aucun message"
+    }
+
+    // Formater le temps
     val time = lastMessage?.createdAt?.let { formatTime(it) } ?: ""
 
-    // Compter les messages non lus (à implémenter selon ta logique)
-    val unreadCount = 0 // TODO: Implémenter la logique de comptage
+    // ✅ CORRIGÉ: Compter les messages non lus (messages où currentUserId n'est PAS dans readBy)
+    val unreadCount = if (lastMessage != null && !lastMessage.readBy.contains(currentUserId)) {
+        // Si le dernier message n'est pas lu, il y a au moins 1 message non lu
+        // Note: Pour un comptage précis de TOUS les messages non lus, il faudrait
+        // que le backend renvoie cette info. Pour l'instant, on se base sur le dernier message.
+        1
+    } else {
+        0
+    }
 
-    // Emoji par défaut (peut être récupéré depuis la sortie)
+    // Emoji par défaut
     val emoji = "🚴"
 
     return ChatGroupUI(
@@ -84,11 +105,11 @@ fun ChatResponse.toChatGroupUI(currentUserId: String): ChatGroupUI {
         name = name ?: "Groupe sans nom",
         emoji = emoji,
         participantsCount = members.size,
-        lastMessage = lastMessage?.content ?: "Aucun message",
+        lastMessage = lastMessageContent, // ✅ Utiliser le contenu formaté
         lastMessageAuthor = lastMessageAuthor,
         time = time,
-        timestamp = lastMessage?.createdAt, // ✅ AJOUTÉ: Conserver le timestamp original
-        unreadCount = unreadCount,
+        timestamp = lastMessage?.createdAt,
+        unreadCount = unreadCount, // ✅ Nombre de messages non lus
         sortieId = sortieId,
         memberAvatars = members.mapNotNull { it.avatar }
     )

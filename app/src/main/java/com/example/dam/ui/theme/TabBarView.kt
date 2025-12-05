@@ -47,7 +47,6 @@ fun TabBarView(
     var showOptions by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
-    // ✅ AJOUTÉ: ViewModels
     val chatViewModel: ChatViewModel = viewModel()
     val loginViewModel: LoginViewModel = viewModel()
 
@@ -66,7 +65,7 @@ fun TabBarView(
             "add" -> 2
             "feed" -> 3
             "profile" -> 4
-            else -> selectedTab // Garde l'onglet actuel (très important !)
+            else -> selectedTab
         }
     }
 
@@ -79,18 +78,16 @@ fun TabBarView(
         label = "rotation"
     )
 
-
-//    // 1. Remplace cette ligne :
-//    val shouldShowBars = currentRoute !in listOf("edit_profile", "addpublication")
-//            && currentRoute?.startsWith("sortieDetail") != true
-//            && currentRoute?.startsWith("chatConversation") != true
-
-    val shouldShowBars = currentRoute !in listOf(
+    // ✅ MODIFIÉ: Liste des routes où les barres doivent être cachées
+    // Les écrans de recommandations MONTRENT les barres (comme home)
+    val hiddenBarRoutes = listOf(
         "edit_profile",
         "addpublication",
         "sortieDetail/{sortieId}",
-        "chatConversation/{groupId}/{groupName}/{groupEmoji}/{participantsCount}"
+        "chatConversation/{sortieId}/{groupName}/{groupEmoji}/{participantsCount}"
     )
+
+    val shouldShowBars = currentRoute !in hiddenBarRoutes
 
     Box(
         modifier = Modifier
@@ -123,10 +120,10 @@ fun TabBarView(
                     startDestination = "home"
                 ) {
                     composable("home") {
-                        HomeExploreScreen(navController = navController)
+                        HomeExploreScreen(navController = internalNavController)
                     }
                     composable("messages") {
-                        MessagesListScreen(navController = navController)
+                        MessagesListScreen(navController = internalNavController)
                     }
                     composable("add") {
                         val token = UserPreferences.getToken(context) ?: ""
@@ -145,7 +142,7 @@ fun TabBarView(
                         EditProfile1Screen(navController = internalNavController)
                     }
                     composable("addpublication") {
-                        AddPublicationScreen(navController = navController)
+                        AddPublicationScreen(navController = internalNavController)
                     }
                     composable(
                         route = "sortieDetail/{sortieId}",
@@ -157,7 +154,7 @@ fun TabBarView(
                     ) { backStackEntry ->
                         val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
                         SortieDetailScreen(
-                            navController = navController,
+                            navController = internalNavController,
                             sortieId = sortieId
                         )
                     }
@@ -176,11 +173,42 @@ fun TabBarView(
                         val participantsCount = backStackEntry.arguments?.getString("participantsCount") ?: "0"
 
                         ChatConversationScreen(
-                            navController = navController,
+                            navController = internalNavController,
                             sortieId = sortieId,
                             groupName = groupName,
                             groupEmoji = groupEmoji,
                             participantsCount = participantsCount
+                        )
+                    }
+
+                    // ✅ NOUVELLES ROUTES - RECOMMANDATIONS
+                    composable("recommendation_hub") {
+                        RecommendationHubScreen(navController = internalNavController)
+                    }
+
+                    composable("preference_recommendations") {
+                        PreferenceRecommendationsScreen(navController = internalNavController)
+                    }
+
+                    composable("weather_recommendations") {
+                        WeatherRecommendationsScreen(navController = internalNavController)
+                    }
+
+                    composable("smart_matches") {
+                        SmartMatchesScreen(navController = internalNavController)
+                    }
+
+                    // ✅ ADD THIS MISSING ROUTE
+                    composable(
+                        route = "participation_requests/{sortieId}",
+                        arguments = listOf(
+                            navArgument("sortieId") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
+                        ParticipationRequestsScreen(
+                            navController = internalNavController,
+                            sortieId = sortieId
                         )
                     }
                 }
@@ -297,7 +325,6 @@ fun TabBarView(
                             0 -> internalNavController.navigate("home") {
                                 popUpTo("home") { inclusive = true }
                             }
-                            // ✅ CHANGÉ: Navigation vers messages
                             1 -> internalNavController.navigate("messages") {
                                 popUpTo("home") { saveState = true }
                                 launchSingleTop = true
@@ -346,11 +373,8 @@ fun TabBarView(
             confirmButton = {
                 Button(
                     onClick = {
-                        // ✅ CORRIGÉ: Appeler la fonction logout du LoginViewModel
                         loginViewModel.logout(context, chatViewModel)
-
                         showLogoutDialog = false
-
                         navController.navigate("login") {
                             popUpTo(0) { inclusive = true }
                         }
@@ -524,7 +548,6 @@ fun GlassBottomNav(
                                     .blur(8.dp)
                             )
 
-                            // Button
                             Surface(
                                 onClick = { onTabSelected(index) },
                                 shape = CircleShape,
@@ -553,7 +576,6 @@ fun GlassBottomNav(
                             }
                         }
                     } else {
-                        // Regular Tab
                         Surface(
                             onClick = { onTabSelected(index) },
                             shape = RoundedCornerShape(20.dp),
@@ -574,13 +596,14 @@ fun GlassBottomNav(
                                 Icon(
                                     imageVector = when (label) {
                                         "Home" -> Icons.Default.Home
-                                        "Discussions" -> Icons.Default.ChatBubble  // ✅ CHANGÉ
+                                        "Discussions" -> Icons.Default.ChatBubble
                                         "Community" -> Icons.Default.Group
                                         "Profile" -> Icons.Default.Person
                                         else -> Icons.Default.Home
                                     },
                                     contentDescription = label,
                                     tint = if (selectedIndex == index)
+
                                         GreenAccent
                                     else
                                         TextSecondary,
@@ -590,35 +613,6 @@ fun GlassBottomNav(
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun ScreenPlaceholder(text: String) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color.Transparent),
-        contentAlignment = Alignment.Center
-    ) {
-        Surface(
-            shape = RoundedCornerShape(20.dp),
-            color = CardGlass,
-            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
-        ) {
-            Box(
-                modifier = Modifier
-                    .background(CardDark.copy(alpha = 0.6f))
-                    .padding(32.dp)
-            ) {
-                Text(
-                    text = text,
-                    color = TextPrimary,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
-                )
             }
         }
     }

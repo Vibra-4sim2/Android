@@ -35,6 +35,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
+import com.example.dam.NavigationRoutes
 import com.example.dam.R
 import com.example.dam.models.SortieResponse
 import com.example.dam.ui.theme.*
@@ -174,6 +175,15 @@ fun HomeExploreScreen(
                     contentPadding = PaddingValues(vertical = 4.dp)
                 ) {
                     item { FilterPill("Explore", Icons.Default.Explore, viewModel.selectedFilter == "explore") { viewModel.setFilter("explore") } }
+                    item {
+                        FilterPill(
+                            "Recommended",
+                            Icons.Default.Stars,
+                            false
+                        ) {
+                            navController.navigate("recommendation_hub")
+                        }
+                    }
                     item { FilterPill("Following", Icons.Default.Favorite, viewModel.selectedFilter == "following") { viewModel.setFilter("following") } }
                     item { FilterPill("Cycling", Icons.Default.DirectionsBike, viewModel.selectedFilter == "cycling") { viewModel.setFilter("cycling") } }
                     item { FilterPill("Hiking", Icons.Default.Hiking, viewModel.selectedFilter == "hiking") { viewModel.setFilter("hiking") } }

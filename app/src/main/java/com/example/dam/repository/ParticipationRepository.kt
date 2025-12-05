@@ -13,6 +13,7 @@ import kotlinx.coroutines.withContext
 class ParticipationRepository {
 
     private val api = RetrofitInstance.adventureApi
+    private val TAG = "ParticipationRepo"
 
     /**
      * Get all participations for a specific sortie
@@ -22,37 +23,64 @@ class ParticipationRepository {
     suspend fun getParticipations(sortieId: String): Result<List<ParticipationResponse>> {
         return withContext(Dispatchers.IO) {
             try {
+                Log.d(TAG, "========================================")
+                Log.d(TAG, "📥 Fetching participations for sortieId: $sortieId")
+                Log.d(TAG, "========================================")
+
                 val response = api.getParticipations(sortieId)
+
+                Log.d(TAG, "Response Code: ${response.code()}")
+                Log.d(TAG, "Response isSuccessful: ${response.isSuccessful}")
+                Log.d(TAG, "Response body is null: ${response.body() == null}")
+
                 if (response.isSuccessful && response.body() != null) {
-                    Log.d("ParticipationRepo", "✅ Fetched ${response.body()!!.size} participations")
-                    Result.Success(response.body()!!)
+                    val participations = response.body()!!
+                    Log.d(TAG, "✅ Fetched ${participations.size} participations")
+
+                    participations.forEachIndexed { index, p ->
+                        Log.d(TAG, "[$index] ID: ${p._id}, Status: ${p.status}, User: ${p.userId.email}")
+                    }
+
+                    Result.Success(participations)
                 } else {
-                    val errorMsg = "Failed to fetch participations: ${response.code()}"
-                    Log.e("ParticipationRepo", errorMsg)
+                    val errorBody = response.errorBody()?.string()
+                    val errorMsg = "Failed to fetch participations: ${response.code()} - $errorBody"
+                    Log.e(TAG, "❌ $errorMsg")
                     Result.Error(errorMsg)
                 }
             } catch (e: Exception) {
                 val errorMsg = "Network error: ${e.message}"
-                Log.e("ParticipationRepo", errorMsg, e)
+                Log.e(TAG, "❌ EXCEPTION in getParticipations: $errorMsg", e)
+                e.printStackTrace()
                 Result.Error(errorMsg)
             }
         }
     }
 
     /**
-     * ✅ FIXED: Create a participation (Join a sortie)
+     * Create a participation (Join a sortie)
      * Endpoint: POST /participations
      * Returns: SimpleParticipationResponse (with string IDs only)
      */
     suspend fun createParticipation(sortieId: String, token: String): Result<SimpleParticipationResponse> {
         return withContext(Dispatchers.IO) {
             try {
+                Log.d(TAG, "========================================")
+                Log.d(TAG, "📤 Creating participation for sortieId: $sortieId")
+                Log.d(TAG, "Token: ${token.take(20)}...")
+                Log.d(TAG, "========================================")
+
                 val request = ParticipationRequest(sortieId = sortieId)
                 val response = api.createParticipation("Bearer $token", request)
 
+                Log.d(TAG, "Response Code: ${response.code()}")
+                Log.d(TAG, "Response isSuccessful: ${response.isSuccessful}")
+
                 if (response.isSuccessful && response.body() != null) {
-                    Log.d("ParticipationRepo", "✅ Participation created: ${response.body()!!._id}")
-                    Result.Success(response.body()!!)
+                    val participation = response.body()!!
+                    Log.d(TAG, "✅ Participation created: ${participation._id}")
+                    Log.d(TAG, "Status: ${participation.status}")
+                    Result.Success(participation)
                 } else {
                     val errorBody = response.errorBody()?.string()
                     val errorMsg = when (response.code()) {
@@ -61,19 +89,20 @@ class ParticipationRepository {
                         401 -> "Unauthorized - please login again"
                         else -> errorBody ?: "Failed to create participation"
                     }
-                    Log.e("ParticipationRepo", "❌ Error ${response.code()}: $errorMsg")
+                    Log.e(TAG, "❌ Error ${response.code()}: $errorMsg")
                     Result.Error(errorMsg)
                 }
             } catch (e: Exception) {
                 val errorMsg = "Network error: ${e.message}"
-                Log.e("ParticipationRepo", errorMsg, e)
+                Log.e(TAG, "❌ EXCEPTION in createParticipation: $errorMsg", e)
+                e.printStackTrace()
                 Result.Error(errorMsg)
             }
         }
     }
 
     /**
-     * ✅ FIXED: Update participation status (Accept/Refuse) - Creator only
+     * Update participation status (Accept/Refuse) - Creator only
      * Endpoint: PATCH /participations/{id}/status
      * Returns: SimpleParticipationResponse (with string IDs only)
      */
@@ -84,6 +113,13 @@ class ParticipationRepository {
     ): Result<SimpleParticipationResponse> {
         return withContext(Dispatchers.IO) {
             try {
+                Log.d(TAG, "========================================")
+                Log.d(TAG, "🔄 Updating participation status")
+                Log.d(TAG, "Participation ID: $participationId")
+                Log.d(TAG, "New Status: $status")
+                Log.d(TAG, "Token: ${token.take(20)}...")
+                Log.d(TAG, "========================================")
+
                 val request = UpdateParticipationStatusRequest(status = status)
                 val response = api.updateParticipationStatus(
                     id = participationId,
@@ -91,22 +127,27 @@ class ParticipationRepository {
                     request = request
                 )
 
+                Log.d(TAG, "Response Code: ${response.code()}")
+                Log.d(TAG, "Response isSuccessful: ${response.isSuccessful}")
+
                 if (response.isSuccessful && response.body() != null) {
-                    Log.d("ParticipationRepo", "✅ Status updated to $status")
+                    Log.d(TAG, "✅ Status updated to $status")
                     Result.Success(response.body()!!)
                 } else {
+                    val errorBody = response.errorBody()?.string()
                     val errorMsg = when (response.code()) {
                         403 -> "Only the sortie creator can update participation status"
                         404 -> "Participation not found"
                         401 -> "Unauthorized - please login again"
-                        else -> "Failed to update status: ${response.code()}"
+                        else -> "Failed to update status: ${response.code()} - $errorBody"
                     }
-                    Log.e("ParticipationRepo", "❌ Error ${response.code()}: $errorMsg")
+                    Log.e(TAG, "❌ Error ${response.code()}: $errorMsg")
                     Result.Error(errorMsg)
                 }
             } catch (e: Exception) {
                 val errorMsg = "Network error: ${e.message}"
-                Log.e("ParticipationRepo", errorMsg, e)
+                Log.e(TAG, "❌ EXCEPTION in updateParticipationStatus: $errorMsg", e)
+                e.printStackTrace()
                 Result.Error(errorMsg)
             }
         }
@@ -119,24 +160,35 @@ class ParticipationRepository {
     suspend fun cancelParticipation(participationId: String, token: String): Result<Unit> {
         return withContext(Dispatchers.IO) {
             try {
+                Log.d(TAG, "========================================")
+                Log.d(TAG, "🗑️ Cancelling participation")
+                Log.d(TAG, "Participation ID: $participationId")
+                Log.d(TAG, "Token: ${token.take(20)}...")
+                Log.d(TAG, "========================================")
+
                 val response = api.cancelParticipation(participationId, "Bearer $token")
 
+                Log.d(TAG, "Response Code: ${response.code()}")
+                Log.d(TAG, "Response isSuccessful: ${response.isSuccessful}")
+
                 if (response.isSuccessful) {
-                    Log.d("ParticipationRepo", "✅ Participation cancelled")
+                    Log.d(TAG, "✅ Participation cancelled")
                     Result.Success(Unit)
                 } else {
+                    val errorBody = response.errorBody()?.string()
                     val errorMsg = when (response.code()) {
                         403 -> "Only the participant can cancel their participation"
                         404 -> "Participation not found"
                         401 -> "Unauthorized - please login again"
-                        else -> "Failed to cancel participation: ${response.code()}"
+                        else -> "Failed to cancel participation: ${response.code()} - $errorBody"
                     }
-                    Log.e("ParticipationRepo", "❌ Error ${response.code()}: $errorMsg")
+                    Log.e(TAG, "❌ Error ${response.code()}: $errorMsg")
                     Result.Error(errorMsg)
                 }
             } catch (e: Exception) {
                 val errorMsg = "Network error: ${e.message}"
-                Log.e("ParticipationRepo", errorMsg, e)
+                Log.e(TAG, "❌ EXCEPTION in cancelParticipation: $errorMsg", e)
+                e.printStackTrace()
                 Result.Error(errorMsg)
             }
         }

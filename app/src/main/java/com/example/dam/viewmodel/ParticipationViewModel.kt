@@ -30,132 +30,228 @@ class ParticipationViewModel : ViewModel() {
     private val _hasJoined = MutableStateFlow(false)
     val hasJoined: StateFlow<Boolean> = _hasJoined.asStateFlow()
 
-    // Load participations for a sortie
+    /**
+     * Load participations for a sortie
+     */
     fun loadParticipations(sortieId: String) {
-        _isLoading.value = true
         viewModelScope.launch {
-            when (val result = repository.getParticipations(sortieId)) {
-                is Result.Success -> {
-                    _participations.value = result.data
-                    Log.d("ParticipationVM", "✅ Loaded ${result.data.size} participations")
-                }
-                is Result.Error -> {
-                    _errorMessage.value = result.message
-                    Log.e("ParticipationVM", "❌ Error: ${result.message}")
-                }
-                else -> {}
-            }
-            _isLoading.value = false
-        }
-    }
+            _isLoading.value = true
+            _errorMessage.value = null // Clear previous errors
 
-    // Join sortie (create participation)
-    fun joinSortie(sortieId: String, token: String, onSuccess: () -> Unit = {}) {
-        _isLoading.value = true
-        viewModelScope.launch {
-            when (val result = repository.createParticipation(sortieId, token)) {
-                is Result.Success -> {
-                    _hasJoined.value = true
-                    _successMessage.value = "Demande envoyée avec succès!"
-                    loadParticipations(sortieId) // Reload list
-                    onSuccess()
-                    Log.d("ParticipationVM", "✅ Joined sortie")
-                }
-                is Result.Error -> {
-                    val message = when {
-                        result.message.contains("already participates") ->
-                            "Vous avez déjà rejoint cette sortie"
-                        result.message.contains("full capacity") ->
-                            "Cette sortie est complète"
-                        else -> result.message
+            try {
+                Log.d("ParticipationVM", "Loading participations for sortie: $sortieId")
+
+                when (val result = repository.getParticipations(sortieId)) {
+                    is Result.Success -> {
+                        _participations.value = result.data
+                        Log.d("ParticipationVM", "✅ Loaded ${result.data.size} participations")
                     }
-                    _errorMessage.value = message
-                    Log.e("ParticipationVM", "❌ Error joining: ${result.message}")
+                    is Result.Error -> {
+                        val errorMsg = result.message
+                        _errorMessage.value = errorMsg
+                        Log.e("ParticipationVM", "❌ Error loading participations: $errorMsg")
+                    }
+                    else -> {
+                        Log.w("ParticipationVM", "Unexpected result type")
+                    }
                 }
-                else -> {}
+            } catch (e: Exception) {
+                val errorMsg = "Erreur: ${e.message}"
+                _errorMessage.value = errorMsg
+                Log.e("ParticipationVM", "❌ Exception loading participations", e)
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
-    // Accept participation request
+    /**
+     * Join sortie (create participation)
+     */
+    fun joinSortie(sortieId: String, token: String, onSuccess: () -> Unit = {}) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _errorMessage.value = null
+
+            try {
+                Log.d("ParticipationVM", "Attempting to join sortie: $sortieId")
+
+                when (val result = repository.createParticipation(sortieId, token)) {
+                    is Result.Success -> {
+                        _hasJoined.value = true
+                        _successMessage.value = "Demande envoyée avec succès!"
+                        loadParticipations(sortieId)
+                        onSuccess()
+                        Log.d("ParticipationVM", "✅ Successfully joined sortie")
+                    }
+                    is Result.Error -> {
+                        val message = when {
+                            result.message.contains("already participates", ignoreCase = true) ->
+                                "Vous avez déjà rejoint cette sortie"
+                            result.message.contains("full capacity", ignoreCase = true) ->
+                                "Cette sortie est complète"
+                            result.message.contains("401") ->
+                                "Non autorisé. Veuillez vous reconnecter"
+                            else -> result.message
+                        }
+                        _errorMessage.value = message
+                        Log.e("ParticipationVM", "❌ Error joining: ${result.message}")
+                    }
+                    else -> {
+                        Log.w("ParticipationVM", "Unexpected result when joining")
+                    }
+                }
+            } catch (e: Exception) {
+                _errorMessage.value = "Erreur réseau: ${e.message}"
+                Log.e("ParticipationVM", "❌ Exception joining sortie", e)
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    /**
+     * Accept participation request
+     */
     fun acceptParticipation(participationId: String, sortieId: String, token: String) {
-        _isLoading.value = true
         viewModelScope.launch {
-            when (val result = repository.updateParticipationStatus(participationId, "ACCEPTEE", token)) {
-                is Result.Success -> {
-                    _successMessage.value = "Demande acceptée!"
-                    loadParticipations(sortieId) // Reload list
-                    Log.d("ParticipationVM", "✅ Accepted participation")
+            _isLoading.value = true
+            _errorMessage.value = null
+
+            try {
+                Log.d("ParticipationVM", "Accepting participation: $participationId")
+
+                when (val result = repository.updateParticipationStatus(participationId, "ACCEPTEE", token)) {
+                    is Result.Success -> {
+                        _successMessage.value = "Demande acceptée!"
+                        loadParticipations(sortieId)
+                        Log.d("ParticipationVM", "✅ Accepted participation")
+                    }
+                    is Result.Error -> {
+                        _errorMessage.value = result.message
+                        Log.e("ParticipationVM", "❌ Error accepting: ${result.message}")
+                    }
+                    else -> {}
                 }
-                is Result.Error -> {
-                    _errorMessage.value = result.message
-                    Log.e("ParticipationVM", "❌ Error accepting: ${result.message}")
-                }
-                else -> {}
+            } catch (e: Exception) {
+                _errorMessage.value = "Erreur: ${e.message}"
+                Log.e("ParticipationVM", "❌ Exception accepting participation", e)
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
-    // Refuse participation request
+    /**
+     * Refuse participation request
+     */
     fun refuseParticipation(participationId: String, sortieId: String, token: String) {
-        _isLoading.value = true
         viewModelScope.launch {
-            when (val result = repository.updateParticipationStatus(participationId, "REFUSEE", token)) {
-                is Result.Success -> {
-                    _successMessage.value = "Demande refusée"
-                    loadParticipations(sortieId) // Reload list
-                    Log.d("ParticipationVM", "✅ Refused participation")
+            _isLoading.value = true
+            _errorMessage.value = null
+
+            try {
+                Log.d("ParticipationVM", "Refusing participation: $participationId")
+
+                when (val result = repository.updateParticipationStatus(participationId, "REFUSEE", token)) {
+                    is Result.Success -> {
+                        _successMessage.value = "Demande refusée"
+                        loadParticipations(sortieId)
+                        Log.d("ParticipationVM", "✅ Refused participation")
+                    }
+                    is Result.Error -> {
+                        _errorMessage.value = result.message
+                        Log.e("ParticipationVM", "❌ Error refusing: ${result.message}")
+                    }
+                    else -> {}
                 }
-                is Result.Error -> {
-                    _errorMessage.value = result.message
-                    Log.e("ParticipationVM", "❌ Error refusing: ${result.message}")
-                }
-                else -> {}
+            } catch (e: Exception) {
+                _errorMessage.value = "Erreur: ${e.message}"
+                Log.e("ParticipationVM", "❌ Exception refusing participation", e)
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
-    // Cancel own participation
+    /**
+     * Cancel own participation
+     */
     fun cancelParticipation(participationId: String, sortieId: String, token: String) {
-        _isLoading.value = true
         viewModelScope.launch {
-            when (val result = repository.cancelParticipation(participationId, token)) {
-                is Result.Success -> {
-                    _hasJoined.value = false
-                    _successMessage.value = "Participation annulée"
-                    loadParticipations(sortieId) // Reload list
-                    Log.d("ParticipationVM", "✅ Cancelled participation")
+            _isLoading.value = true
+            _errorMessage.value = null
+
+            try {
+                Log.d("ParticipationVM", "Cancelling participation: $participationId")
+
+                when (val result = repository.cancelParticipation(participationId, token)) {
+                    is Result.Success -> {
+                        _hasJoined.value = false
+                        _successMessage.value = "Participation annulée"
+                        loadParticipations(sortieId)
+                        Log.d("ParticipationVM", "✅ Cancelled participation")
+                    }
+                    is Result.Error -> {
+                        _errorMessage.value = result.message
+                        Log.e("ParticipationVM", "❌ Error cancelling: ${result.message}")
+                    }
+                    else -> {}
                 }
-                is Result.Error -> {
-                    _errorMessage.value = result.message
-                    Log.e("ParticipationVM", "❌ Error cancelling: ${result.message}")
-                }
-                else -> {}
+            } catch (e: Exception) {
+                _errorMessage.value = "Erreur: ${e.message}"
+                Log.e("ParticipationVM", "❌ Exception cancelling participation", e)
+            } finally {
+                _isLoading.value = false
             }
-            _isLoading.value = false
         }
     }
 
-    // Check if current user has joined
+    /**
+     * Check if current user has joined
+     */
     fun checkIfJoined(sortieId: String, currentUserId: String) {
         viewModelScope.launch {
-            val hasJoined = _participations.value.any {
-                it.userId._id == currentUserId && it.status != "REFUSEE"
+            try {
+                val hasJoined = _participations.value.any {
+                    it.userId._id == currentUserId && it.status != "REFUSEE"
+                }
+                _hasJoined.value = hasJoined
+                Log.d("ParticipationVM", "User has joined: $hasJoined")
+            } catch (e: Exception) {
+                Log.e("ParticipationVM", "Error checking if joined", e)
             }
-            _hasJoined.value = hasJoined
         }
     }
 
-    // Get pending requests count
+    /**
+     * Get pending requests count
+     */
     fun getPendingCount(): Int {
-        return _participations.value.count { it.status == "EN_ATTENTE" }
+        return try {
+            _participations.value.count { it.status == "EN_ATTENTE" }
+        } catch (e: Exception) {
+            Log.e("ParticipationVM", "Error getting pending count", e)
+            0
+        }
     }
 
+    /**
+     * Clear messages
+     */
     fun clearMessages() {
         _errorMessage.value = null
         _successMessage.value = null
+    }
+
+    /**
+     * Reset state (useful when leaving screen)
+     */
+    fun resetState() {
+        _participations.value = emptyList()
+        _isLoading.value = false
+        _errorMessage.value = null
+        _successMessage.value = null
+        _hasJoined.value = false
     }
 }

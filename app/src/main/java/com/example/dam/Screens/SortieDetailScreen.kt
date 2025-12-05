@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
+import com.example.dam.NavigationRoutes
 import com.example.dam.R
 import com.example.dam.models.SortieResponse
 import com.example.dam.ui.theme.*
@@ -158,7 +159,7 @@ fun SortieDetailScreen(
                         participationViewModel.joinSortie(sortieId, token)
                     },
                     onManageRequestsClick = {
-                        navController.navigate("participation_requests/$sortieId")
+                        navController.navigate(NavigationRoutes.participationRequestsRoute(sortieId))
                     }
                 )
             }

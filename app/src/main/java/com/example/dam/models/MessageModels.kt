@@ -139,6 +139,7 @@ data class MessageUI(
     val imageUrl: String?,
     val videoUrl: String?,
     val audioUrl: String?,
+    val audioDuration: Int?, // ✅ AJOUTÉ: Durée audio en secondes
     val location: LocationData?,
     val time: String,
     val timestamp: String, // ✅ AJOUTÉ: Timestamp original pour tri chronologique
@@ -211,7 +212,8 @@ fun MessageResponse.toMessageUI(currentUserId: String?): MessageUI {
         content = this.content,
         imageUrl = this.imageUrl ?: this.mediaUrl,
         videoUrl = this.videoUrl,
-        audioUrl = this.audioUrl,
+        audioUrl = this.audioUrl ?: (if (messageType == MessageType.AUDIO) this.mediaUrl else null),
+        audioDuration = this.mediaDuration?.toInt(), // ✅ AJOUTÉ: Durée audio en secondes
         location = this.location,
         time = time,
         timestamp = this.createdAt, // ✅ AJOUTÉ: Timestamp original pour tri

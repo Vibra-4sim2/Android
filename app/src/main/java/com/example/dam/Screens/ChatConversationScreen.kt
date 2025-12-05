@@ -1,5 +1,6 @@
 package com.example.dam.Screens
 
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
@@ -29,9 +30,17 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
+import com.example.dam.components.AudioMessageBubble
+import com.example.dam.components.RecordingIndicator
 import com.example.dam.models.MessageStatus
 import com.example.dam.models.MessageType
 import com.example.dam.models.MessageUI
+import android.Manifest
+import com.example.dam.utils.AudioRecorder
+import com.example.dam.utils.ImagePickerUtil
+import com.example.dam.utils.PermissionHelper
+import com.example.dam.utils.rememberImagePickerLauncher
+import com.example.dam.utils.rememberRecordAudioPermissionLauncher
 import com.example.dam.viewmodel.ChatViewModel
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -65,6 +74,76 @@ fun ChatConversationScreen(
 
     // Job pour l'indicateur de frappe
     var typingJob by remember { mutableStateOf<Job?>(null) }
+
+    // ✅ États pour l'enregistrement audio
+    val audioRecorder = remember { AudioRecorder(context) }
+    var isRecordingAudio by remember { mutableStateOf(false) }
+    var recordingDuration by remember { mutableStateOf(0) }
+    var recordingJob by remember { mutableStateOf<Job?>(null) }
+
+    // ✅ Permission RECORD_AUDIO Launcher
+    val recordAudioPermissionLauncher = rememberRecordAudioPermissionLauncher(
+        onPermissionGranted = {
+            // Permission accordée, démarrer l'enregistrement
+            android.util.Log.d("ChatConversation", "🎤 Permission accordée, démarrage enregistrement")
+            audioRecorder.startRecording().fold(
+                onSuccess = { file ->
+                    android.util.Log.d("ChatConversation", "✅ Enregistrement démarré: ${file.absolutePath}")
+                    isRecordingAudio = true
+                    recordingDuration = 0
+
+                    // Mettre à jour la durée toutes les secondes
+                    recordingJob = coroutineScope.launch {
+                        while (isRecordingAudio) {
+                            delay(1000)
+                            recordingDuration = audioRecorder.getCurrentDuration()
+                        }
+                    }
+                },
+                onFailure = { error ->
+                    android.util.Log.e("ChatConversation", "❌ Erreur enregistrement: ${error.message}")
+                    viewModel.showError(error.message ?: "Impossible d'enregistrer")
+                }
+            )
+        },
+        onPermissionDenied = {
+            // Permission refusée
+            android.util.Log.e("ChatConversation", "❌ Permission RECORD_AUDIO refusée")
+            viewModel.showError("Permission d'enregistrement audio requise pour envoyer des messages vocaux")
+        }
+    )
+
+    // ✅ Image Picker Launcher
+    val imagePickerLauncher = rememberImagePickerLauncher(
+        onImageSelected = { uri ->
+            android.util.Log.d("ChatConversation", "🖼️ Image sélectionnée: $uri")
+
+            // Convertir Uri en File
+            val imageFile = ImagePickerUtil.uriToFile(context, uri)
+
+            if (imageFile != null) {
+                // Valider l'image
+                ImagePickerUtil.validateImage(imageFile).fold(
+                    onSuccess = {
+                        android.util.Log.d("ChatConversation", "✅ Image valide, envoi en cours...")
+                        // Envoyer l'image via le ViewModel
+                        viewModel.sendImageMessage(sortieId, imageFile, context)
+                    },
+                    onFailure = { error ->
+                        android.util.Log.e("ChatConversation", "❌ Image invalide: ${error.message}")
+                        viewModel.showError(error.message ?: "Image invalide")
+                    }
+                )
+            } else {
+                android.util.Log.e("ChatConversation", "❌ Impossible de convertir l'Uri en File")
+                viewModel.showError("Impossible de charger l'image")
+            }
+        },
+        onError = { error ->
+            android.util.Log.e("ChatConversation", "❌ Erreur sélection image: $error")
+            viewModel.showError(error)
+        }
+    )
 
     // ✅ Se connecter et rejoindre la room au démarrage
     LaunchedEffect(sortieId) {
@@ -362,6 +441,59 @@ fun ChatConversationScreen(
                 }
             }
 
+            // ========== RECORDING INDICATOR ==========
+            AnimatedVisibility(
+                visible = isRecordingAudio,
+                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
+                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+            ) {
+                RecordingIndicator(
+                    duration = recordingDuration,
+                    onCancel = {
+                        android.util.Log.d("ChatConversation", "🚫 Annulation enregistrement")
+                        audioRecorder.cancelRecording()
+                        isRecordingAudio = false
+                        recordingJob?.cancel()
+                        recordingJob = null
+                        recordingDuration = 0
+                    },
+                    onStop = {
+                        android.util.Log.d("ChatConversation", "⏹️ Arrêt enregistrement")
+                        audioRecorder.stopRecording().fold(
+                            onSuccess = { result ->
+                                android.util.Log.d("ChatConversation", "✅ Enregistrement terminé: ${result.file.name} (${result.durationSeconds}s)")
+
+                                // Valider le fichier audio
+                                AudioRecorder.validateAudioFile(result.file).fold(
+                                    onSuccess = {
+                                        // Envoyer le message vocal
+                                        viewModel.sendAudioMessage(sortieId, result.file, result.durationSeconds, context)
+                                    },
+                                    onFailure = { error ->
+                                        android.util.Log.e("ChatConversation", "❌ Audio invalide: ${error.message}")
+                                        viewModel.showError(error.message ?: "Fichier audio invalide")
+                                    }
+                                )
+
+                                // Réinitialiser l'état
+                                isRecordingAudio = false
+                                recordingJob?.cancel()
+                                recordingJob = null
+                                recordingDuration = 0
+                            },
+                            onFailure = { error ->
+                                android.util.Log.e("ChatConversation", "❌ Erreur arrêt: ${error.message}")
+                                viewModel.showError(error.message ?: "Erreur d'enregistrement")
+                                isRecordingAudio = false
+                                recordingJob?.cancel()
+                                recordingJob = null
+                                recordingDuration = 0
+                            }
+                        )
+                    }
+                )
+            }
+
             // ========== ATTACHMENT OPTIONS ==========
             AnimatedVisibility(
                 visible = showAttachmentOptions,
@@ -371,8 +503,14 @@ fun ChatConversationScreen(
                 AttachmentOptionsPanel(
                     onDismiss = { showAttachmentOptions = false },
                     onImageClick = {
-                        // TODO: Implémenter la sélection d'image
+                        // ✅ Lancer le sélecteur d'image
+                        android.util.Log.d("ChatConversation", "📸 Bouton Image cliqué")
                         showAttachmentOptions = false
+                        imagePickerLauncher.launch(
+                            androidx.activity.result.PickVisualMediaRequest(
+                                ActivityResultContracts.PickVisualMedia.ImageOnly
+                            )
+                        )
                     },
                     onCameraClick = {
                         // TODO: Implémenter la caméra
@@ -495,22 +633,58 @@ fun ChatConversationScreen(
 
                     Spacer(modifier = Modifier.width(8.dp))
 
-                    // ✅ Bouton d'envoi amélioré
+                    // ✅ Bouton d'envoi / microphone amélioré
                     FloatingActionButton(
                         onClick = {
-                            if (messageText.text.isNotBlank() && isConnected && !isSending) {
-                                // Envoyer le message
-                                viewModel.sendTextMessage(sortieId, messageText.text.trim(), context)
+                            when {
+                                // Si texte présent : envoyer message texte
+                                messageText.text.isNotBlank() && isConnected && !isSending -> {
+                                    viewModel.sendTextMessage(sortieId, messageText.text.trim(), context)
+                                    viewModel.sendTypingIndicator(sortieId, false)
+                                    typingJob?.cancel()
+                                    messageText = TextFieldValue("")
+                                }
+                                // Si texte vide : démarrer/arrêter enregistrement audio
+                                messageText.text.isEmpty() && isConnected && !isSending -> {
+                                    if (!isRecordingAudio) {
+                                        // ✅ Vérifier la permission RECORD_AUDIO
+                                        android.util.Log.d("ChatConversation", "🎤 Clic sur bouton microphone")
+                                        if (PermissionHelper.hasRecordAudioPermission(context)) {
+                                            // Permission déjà accordée, démarrer directement
+                                            android.util.Log.d("ChatConversation", "✅ Permission déjà accordée, démarrage enregistrement")
+                                            audioRecorder.startRecording().fold(
+                                                onSuccess = { file ->
+                                                    android.util.Log.d("ChatConversation", "✅ Enregistrement démarré: ${file.absolutePath}")
+                                                    isRecordingAudio = true
+                                                    recordingDuration = 0
 
-                                // Envoyer isTyping = false
-                                viewModel.sendTypingIndicator(sortieId, false)
-                                typingJob?.cancel()
-
-                                // Vider le champ
-                                messageText = TextFieldValue("")
+                                                    // Mettre à jour la durée toutes les secondes
+                                                    recordingJob = coroutineScope.launch {
+                                                        while (isRecordingAudio) {
+                                                            delay(1000)
+                                                            recordingDuration = audioRecorder.getCurrentDuration()
+                                                        }
+                                                    }
+                                                },
+                                                onFailure = { error ->
+                                                    android.util.Log.e("ChatConversation", "❌ Erreur enregistrement: ${error.message}")
+                                                    viewModel.showError(error.message ?: "Impossible d'enregistrer")
+                                                }
+                                            )
+                                        } else {
+                                            // Demander la permission
+                                            android.util.Log.d("ChatConversation", "📋 Demande de permission RECORD_AUDIO")
+                                            recordAudioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                        }
+                                    }
+                                }
                             }
                         },
-                        containerColor = if (isConnected) Color(0xFF25D366) else Color.Gray,
+                        containerColor = when {
+                            isRecordingAudio -> Color.Red
+                            isConnected -> Color(0xFF25D366)
+                            else -> Color.Gray
+                        },
                         modifier = Modifier.size(48.dp),
                         shape = CircleShape
                     ) {
@@ -520,6 +694,13 @@ fun ChatConversationScreen(
                                     modifier = Modifier.size(24.dp),
                                     color = Color.White,
                                     strokeWidth = 2.dp
+                                )
+                            }
+                            isRecordingAudio -> {
+                                Icon(
+                                    Icons.Default.Stop,
+                                    contentDescription = "Stop Recording",
+                                    tint = Color.White
                                 )
                             }
                             messageText.text.isEmpty() -> {
@@ -617,8 +798,19 @@ fun ChatMessageBubble(message: MessageUI) {
                 color = if (message.isMe) Color(0xFF056162) else Color(0xFF2d4a3e)
             ) {
                 Column {
+                    // ✅ Audio (Message vocal)
+                    if (message.type == MessageType.AUDIO && message.audioUrl != null) {
+                        AudioMessageBubble(
+                            audioUrl = message.audioUrl,
+                            durationSeconds = message.audioDuration ?: 0,
+                            isMe = message.isMe,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        // Note: Le timestamp et le statut sont déjà affichés dans AudioMessageBubble
+                    }
+
                     // ✅ Image
-                    if (message.type == MessageType.IMAGE && message.imageUrl != null) {
+                    else if (message.type == MessageType.IMAGE && message.imageUrl != null) {
                         AsyncImage(
                             model = message.imageUrl,
                             contentDescription = "Shared image",
@@ -638,7 +830,7 @@ fun ChatMessageBubble(message: MessageUI) {
                     }
 
                     // Text content
-                    if (!message.content.isNullOrEmpty()) {
+                    if (!message.content.isNullOrEmpty() && message.type != MessageType.AUDIO) {
                         Row(
                             modifier = Modifier.padding(
                                 start = 12.dp,

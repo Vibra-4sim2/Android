@@ -37,9 +37,17 @@ fun MessagesListScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
-    // Charger les chats au démarrage
+    // ✅ Charger les chats au démarrage ET quand on revient à cet écran
     LaunchedEffect(Unit) {
         viewModel.loadUserChats(context)
+    }
+
+    // ✅ Rafraîchir quand on revient de la conversation (pour mettre à jour le badge non lu)
+    DisposableEffect(Unit) {
+        onDispose {
+            // Rafraîchir la liste quand on quitte cet écran (retour de conversation)
+            viewModel.loadUserChats(context)
+        }
     }
 
     Box(
@@ -405,26 +413,29 @@ fun GroupChatItem(group: ChatGroupUI, onClick: () -> Unit) {
                     )
                 }
                 Spacer(modifier = Modifier.height(4.dp))
+                // ✅ Affichage du dernier message avec style différent si non lu
                 Text(
                     text = if (group.lastMessage.isNotEmpty()) {
                         "${group.lastMessageAuthor}: ${group.lastMessage}"
                     } else {
                         "Aucun message"
                     },
-                    color = GreenAccent,
+                    color = if (group.unreadCount > 0) TextPrimary else TextSecondary, // ✅ Blanc si non lu, gris sinon
                     fontSize = 14.sp,
+                    fontWeight = if (group.unreadCount > 0) FontWeight.SemiBold else FontWeight.Normal, // ✅ Bold si non lu
                     maxLines = 1
                 )
             }
 
+            // ✅ Badge de messages non lus (style WhatsApp/Messenger)
             if (group.unreadCount > 0) {
                 Spacer(modifier = Modifier.width(8.dp))
                 Surface(
                     shape = CircleShape,
-                    color = GreenAccent
+                    color = ErrorRed // ✅ Rouge comme WhatsApp/Messenger
                 ) {
                     Text(
-                        text = group.unreadCount.toString(),
+                        text = if (group.unreadCount > 99) "99+" else group.unreadCount.toString(),
                         color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,

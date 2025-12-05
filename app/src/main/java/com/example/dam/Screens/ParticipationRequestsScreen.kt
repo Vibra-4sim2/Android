@@ -1,6 +1,5 @@
 package com.example.dam.Screens
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -24,6 +23,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.example.dam.models.ParticipationResponse
 import com.example.dam.ui.theme.*
+import com.example.dam.utils.UserPreferences
 import com.example.dam.viewmodel.ParticipationViewModel
 import java.text.SimpleDateFormat
 import java.util.*
@@ -36,8 +36,9 @@ fun ParticipationRequestsScreen(
     viewModel: ParticipationViewModel = viewModel()
 ) {
     val context = LocalContext.current
-    val sharedPref = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-    val token = sharedPref.getString("access_token", "") ?: ""
+
+    // ✅ CORRECTION: Utiliser UserPreferences au lieu de SharedPreferences direct
+    val token = remember { UserPreferences.getToken(context) ?: "" }
 
     val participations by viewModel.participations.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
@@ -49,7 +50,7 @@ fun ParticipationRequestsScreen(
         viewModel.loadParticipations(sortieId)
     }
 
-    // Afficher les messages
+    // Afficher les messages de succès
     LaunchedEffect(successMessage) {
         successMessage?.let {
             android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
@@ -57,6 +58,7 @@ fun ParticipationRequestsScreen(
         }
     }
 
+    // Afficher les messages d'erreur
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
             android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
@@ -80,7 +82,7 @@ fun ParticipationRequestsScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) { // ← Retour à la page précédente
+                    IconButton(onClick = { navController.popBackStack() }) {
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Retour",
@@ -95,7 +97,7 @@ fun ParticipationRequestsScreen(
                 )
             )
         },
-        containerColor = Color.Transparent // Pour laisser le gradient du Box
+        containerColor = Color.Transparent
     ) { innerPadding ->
         Box(
             modifier = Modifier
@@ -107,102 +109,154 @@ fun ParticipationRequestsScreen(
                     )
                 )
         ) {
-            if (isLoading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.align(Alignment.Center),
-                    color = GreenAccent
-                )
-            } else if (participations.isEmpty()) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.GroupOff,
-                        contentDescription = null,
-                        tint = TextTertiary,
-                        modifier = Modifier.size(80.dp)
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Text(
-                        text = "Aucune demande pour le moment",
-                        color = TextSecondary,
-                        fontSize = 16.sp,
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
+            when {
+                isLoading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            CircularProgressIndicator(color = GreenAccent)
+                            Text(
+                                "Chargement des demandes...",
+                                color = TextSecondary,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
                 }
-            } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // === En attente ===
-                    if (pendingRequests.isNotEmpty()) {
-                        item {
-                            Text(
-                                "En attente • ${pendingRequests.size}",
-                                color = TextPrimary,
-                                fontSize = 17.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        items(pendingRequests) { participation ->
-                            ParticipationCard(
-                                participation = participation,
-                                onAccept = {
-                                    viewModel.acceptParticipation(participation._id, sortieId, token)
-                                },
-                                onRefuse = {
-                                    viewModel.refuseParticipation(participation._id, sortieId, token)
-                                }
-                            )
-                        }
-                    }
 
-                    // === Acceptées ===
-                    if (acceptedRequests.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "Acceptées • ${acceptedRequests.size}",
-                                color = SuccessGreen,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                        items(acceptedRequests) { participation ->
-                            ParticipationCard(participation = participation, showActions = false)
-                        }
+                participations.isEmpty() -> {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.GroupOff,
+                            contentDescription = null,
+                            tint = TextTertiary,
+                            modifier = Modifier.size(80.dp)
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+                        Text(
+                            text = "Aucune demande pour le moment",
+                            color = TextSecondary,
+                            fontSize = 16.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "Les demandes de participation apparaîtront ici",
+                            color = TextTertiary,
+                            fontSize = 14.sp,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                        )
                     }
+                }
 
-                    // === Refusées ===
-                    if (refusedRequests.isNotEmpty()) {
-                        item {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                "Refusées • ${refusedRequests.size}",
-                                color = ErrorRed,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                else -> {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        // === En attente ===
+                        if (pendingRequests.isNotEmpty()) {
+                            item {
+                                SectionHeader(
+                                    title = "En attente",
+                                    count = pendingRequests.size,
+                                    color = Color(0xFFFFA500)
+                                )
+                            }
+                            items(pendingRequests) { participation ->
+                                ParticipationCard(
+                                    participation = participation,
+                                    onAccept = {
+                                        viewModel.acceptParticipation(participation._id, sortieId, token)
+                                    },
+                                    onRefuse = {
+                                        viewModel.refuseParticipation(participation._id, sortieId, token)
+                                    }
+                                )
+                            }
                         }
-                        items(refusedRequests) { participation ->
-                            ParticipationCard(participation = participation, showActions = false)
+
+                        // === Acceptées ===
+                        if (acceptedRequests.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                SectionHeader(
+                                    title = "Acceptées",
+                                    count = acceptedRequests.size,
+                                    color = SuccessGreen
+                                )
+                            }
+                            items(acceptedRequests) { participation ->
+                                ParticipationCard(participation = participation, showActions = false)
+                            }
                         }
+
+                        // === Refusées ===
+                        if (refusedRequests.isNotEmpty()) {
+                            item {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                SectionHeader(
+                                    title = "Refusées",
+                                    count = refusedRequests.size,
+                                    color = ErrorRed
+                                )
+                            }
+                            items(refusedRequests) { participation ->
+                                ParticipationCard(participation = participation, showActions = false)
+                            }
+                        }
+
+                        item { Spacer(modifier = Modifier.height(32.dp)) }
                     }
-
-                    item { Spacer(modifier = Modifier.height(32.dp)) }
                 }
             }
         }
     }
 }
 
-// === ParticipationCard & StatusBadge (inchangés, juste un peu plus propres) ===
+@Composable
+private fun SectionHeader(
+    title: String,
+    count: Int,
+    color: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = title,
+            color = color,
+            fontSize = 17.sp,
+            fontWeight = FontWeight.Bold
+        )
+        Surface(
+            shape = CircleShape,
+            color = color.copy(alpha = 0.2f)
+        ) {
+            Text(
+                text = count.toString(),
+                color = color,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            )
+        }
+    }
+}
+
 @Composable
 fun ParticipationCard(
     participation: ParticipationResponse,

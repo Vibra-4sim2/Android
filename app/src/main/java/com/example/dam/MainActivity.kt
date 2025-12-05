@@ -230,6 +230,24 @@ fun NavigationGraph(
             )
         }
 
+
+
+
+        // ✅ AJOUTE CETTE ROUTE ICI (après sortieDetail ou où tu veux)
+        composable(
+            route = "participation_requests/{sortieId}",
+            arguments = listOf(
+                navArgument("sortieId") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
+            ParticipationRequestsScreen(
+                navController = navController,
+                sortieId = sortieId
+            )
+        }
+
+
         // ✅ NEW: Sortie Detail Screen with ID parameter
         composable(
             route = "sortieDetail/{sortieId}",
@@ -277,6 +295,23 @@ fun NavigationGraph(
                 participantsCount = participantsCount
             )
         }
+
+        // ✅ AJOUTEZ CES 4 NOUVELLES ROUTES
+        composable(NavigationRoutes.RECOMMENDATION_HUB) {
+            RecommendationHubScreen(navController = navController)
+        }
+
+        composable(NavigationRoutes.PREFERENCE_RECOMMENDATIONS) {
+            PreferenceRecommendationsScreen(navController = navController)
+        }
+
+        composable(NavigationRoutes.WEATHER_RECOMMENDATIONS) {
+            WeatherRecommendationsScreen(navController = navController)
+        }
+
+        composable(NavigationRoutes.SMART_MATCHES) {
+            SmartMatchesScreen(navController = navController)
+        }
     }
 }
 // ✅ Routes mises à jour
@@ -296,6 +331,12 @@ object NavigationRoutes {
     const val FEED = "feed"
     const val ADD_PUB = "addpublication"
     const val SORTIE_DETAIL = "sortieDetail/{sortieId}"
+    // ✅ AJOUTEZ CES 4 LIGNES
+    const val RECOMMENDATION_HUB = "recommendation_hub"
+    const val PREFERENCE_RECOMMENDATIONS = "preference_recommendations"
+    const val WEATHER_RECOMMENDATIONS = "weather_recommendations"
+    const val SMART_MATCHES = "smart_matches"
+    const val PARTICIPATION_REQUESTS = "participation_requests/{sortieId}"
 
     // ← NEW: Accept token
     const val CREATE = "createadventure/{token}"
@@ -318,6 +359,10 @@ object NavigationRoutes {
         val encodedEmoji = java.net.URLEncoder.encode(groupEmoji, "UTF-8")
         return "chatConversation/$sortieId/$encodedGroupName/$encodedEmoji/$participantsCount"
     }
+
+
+    fun participationRequestsRoute(sortieId: String) = "participation_requests/$sortieId"
+
 }
 
 @Preview(showBackground = true)

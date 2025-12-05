@@ -3,6 +3,7 @@ package com.example.dam.remote
 
 import com.example.dam.models.ParticipationRequest
 import com.example.dam.models.ParticipationResponse
+import com.example.dam.models.RecommendationsResponse
 import com.example.dam.models.SimpleParticipationResponse
 import com.example.dam.models.SortieResponse
 import com.example.dam.models.UpdateParticipationStatusRequest
@@ -97,6 +98,15 @@ interface AdventureApi {
         @Path("id") id: String,
         @Header("Authorization") token: String
     ): Response<Unit>
+
+
+
+
+    @GET("recommendations/user/{userId}")
+    suspend fun getRecommendationsForUser(
+        @Path("userId") userId: String,
+        @Header("Authorization") token: String
+    ): Response<RecommendationsResponse>
 }
 
 

@@ -37,9 +37,10 @@ object RetrofitInstance {
      */
     private val okHttpClient = OkHttpClient.Builder()
         .addInterceptor(loggingInterceptor)           // Ajoute le logging
-        .connectTimeout(30, TimeUnit.SECONDS)         // Timeout connexion
-        .readTimeout(30, TimeUnit.SECONDS)            // Timeout lecture
-        .writeTimeout(30, TimeUnit.SECONDS)           // Timeout écriture
+        // APRÈS (assez long pour attendre le réveil de Render)
+        .connectTimeout(90, TimeUnit.SECONDS)  // ✅
+        .readTimeout(90, TimeUnit.SECONDS)     // ✅
+        .writeTimeout(90, TimeUnit.SECONDS)    // ✅         // Timeout écriture
         .build()
 
     /**
