@@ -11,7 +11,7 @@ import java.util.concurrent.TimeUnit
 object GoogleRetrofitInstance {
     private const val BASE_URL = "https://maps.googleapis.com/maps/api/"
 
-    private const val API_KEY = "AIzaSyDBAlApULWx9IjcK-z7k8i46QcD4h9I20o="
+    private const val API_KEY = "AIzaSyDBAlApULWx9IjcK-z7k8i46QcD4h9I20o"
     private val logging = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY
     }

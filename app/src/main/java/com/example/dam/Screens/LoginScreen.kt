@@ -124,6 +124,13 @@ fun LoginScreen(
                     clearSavedCredentials(context)
                 }
 
+                // ✅ DÉMARRER LE POLLING DES NOTIFICATIONS
+                com.example.dam.services.NotificationPollingService.startPolling(
+                    context = context,
+                    intervalSeconds = 15 // Poll toutes les 15 secondes
+                )
+                Log.d("LoginScreen", "🔔 Notification polling started")
+
                 // ✅ VÉRIFIER si l'onboarding preferences est complété
                 val isOnboardingComplete = UserPreferences.isOnboardingComplete(context)
                 Log.d("LoginScreen", "Onboarding complete: $isOnboardingComplete")

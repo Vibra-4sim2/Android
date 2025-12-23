@@ -31,10 +31,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.example.dam.components.AudioMessageBubble
+import com.example.dam.components.CreatePollDialog
+import com.example.dam.components.PollMessageBubble
 import com.example.dam.components.RecordingIndicator
 import com.example.dam.models.MessageStatus
 import com.example.dam.models.MessageType
 import com.example.dam.models.MessageUI
+import com.example.dam.models.Poll
 import android.Manifest
 import com.example.dam.utils.AudioRecorder
 import com.example.dam.utils.ImagePickerUtil
@@ -58,9 +61,10 @@ fun ChatConversationScreen(
     val context = LocalContext.current
     var messageText by remember { mutableStateOf(TextFieldValue("")) }
     var showAttachmentOptions by remember { mutableStateOf(false) }
-
+    var showPollDialog by remember { mutableStateOf(false) }
     // États du ViewModel
     val messages by viewModel.messages.collectAsState()
+    val polls by viewModel.polls.collectAsState()
     val isConnected by viewModel.isConnected.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val isSending by viewModel.isSending.collectAsState()
@@ -74,6 +78,89 @@ fun ChatConversationScreen(
 
     // Job pour l'indicateur de frappe
     var typingJob by remember { mutableStateOf<Job?>(null) }
+
+    // ✅ ORDRE CHRONOLOGIQUE : Mélanger messages et sondages par date
+    data class ChatItem(
+        val id: String,
+        val timestamp: Long,
+        val type: String,
+        val messageUI: MessageUI? = null,
+        val poll: Poll? = null
+    )
+
+    val combinedItems = remember(messages, polls) {
+        // Parser pour les dates ISO
+        val sdf = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", java.util.Locale.US)
+        sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+
+        val messageItems = messages.map { msg ->
+            val timestamp = try {
+                // Essayer différents formats de parsing
+                when {
+                    // Si c'est déjà un Long en String
+                    msg.timestamp.toLongOrNull() != null -> msg.timestamp.toLong()
+                    // Si c'est un format ISO (ex: "2025-12-08T22:30:00.000Z")
+                    msg.timestamp.contains("T") -> {
+                        sdf.parse(msg.timestamp)?.time ?: run {
+                            android.util.Log.w("ChatConversation", "⚠️ Impossible de parser msg timestamp: ${msg.timestamp}")
+                            System.currentTimeMillis()
+                        }
+                    }
+                    // Sinon, utiliser maintenant comme fallback
+                    else -> {
+                        android.util.Log.w("ChatConversation", "⚠️ Format timestamp inconnu pour message: ${msg.timestamp}")
+                        System.currentTimeMillis()
+                    }
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ChatConversation", "❌ Erreur parsing timestamp message: ${e.message}")
+                System.currentTimeMillis()
+            }
+
+            android.util.Log.d("ChatConversation", "📝 Message: ${msg.id} -> timestamp: $timestamp (${msg.timestamp})")
+
+            ChatItem(
+                id = msg.id,
+                timestamp = timestamp,
+                type = "message",
+                messageUI = msg
+            )
+        }
+
+        val pollItems = polls.map { poll ->
+            val timestamp = try {
+                sdf.parse(poll.createdAt)?.time ?: run {
+                    android.util.Log.w("ChatConversation", "⚠️ Impossible de parser poll createdAt: ${poll.createdAt}")
+                    System.currentTimeMillis()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("ChatConversation", "❌ Erreur parsing date poll: ${e.message}")
+                System.currentTimeMillis()
+            }
+
+            android.util.Log.d("ChatConversation", "📊 Poll: ${poll.id} -> timestamp: $timestamp (${poll.createdAt})")
+
+            ChatItem(
+                id = poll.id,
+                timestamp = timestamp,
+                type = "poll",
+                poll = poll
+            )
+        }
+
+        val sorted = (messageItems + pollItems).sortedBy { it.timestamp }
+
+        android.util.Log.d("ChatConversation", "========================================")
+        android.util.Log.d("ChatConversation", "📊 TRI CHRONOLOGIQUE:")
+        android.util.Log.d("ChatConversation", "   ${messageItems.size} messages + ${pollItems.size} polls = ${sorted.size} items")
+        sorted.forEach { item ->
+            val date = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(item.timestamp))
+            android.util.Log.d("ChatConversation", "   ${item.type}: ${item.id} -> $date")
+        }
+        android.util.Log.d("ChatConversation", "========================================")
+
+        sorted
+    }
 
     // ✅ États pour l'enregistrement audio
     val audioRecorder = remember { AudioRecorder(context) }
@@ -157,7 +244,15 @@ fun ChatConversationScreen(
         android.util.Log.d("ChatConversationScreen", "   messages count: ${messages.size}")
         android.util.Log.d("ChatConversationScreen", "🔄 Appel de viewModel.connectAndJoinRoom()...")
         android.util.Log.d("ChatConversationScreen", "========================================")
+
+        // ✅ Initialiser le contexte du ViewModel pour les WebSockets
+        viewModel.setApplicationContext(context)
+
         viewModel.connectAndJoinRoom(sortieId, context)
+
+        // ✅ Charger les sondages
+        android.util.Log.d("ChatConversationScreen", "📊 Chargement des sondages...")
+        viewModel.loadPolls(sortieId, context)
     }
 
     // ✅ Auto-scroll quand un nouveau message arrive (index 0 = bas avec reverseLayout)
@@ -423,7 +518,7 @@ fun ChatConversationScreen(
                         }
                     }
                     else -> {
-                        // ✅ Messages list
+                        // ✅ ORDRE CHRONOLOGIQUE : Messages et Polls mélangés par date
                         LazyColumn(
                             state = listState,
                             modifier = Modifier
@@ -433,8 +528,26 @@ fun ChatConversationScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp),
                             reverseLayout = true
                         ) {
-                            items(messages.reversed(), key = { it.id }) { message ->
-                                ChatMessageBubble(message)
+                            // Items triés chronologiquement (reversed car reverseLayout)
+                            items(combinedItems.reversed(), key = { it.id }) { item ->
+                                when (item.type) {
+                                    "message" -> {
+                                        item.messageUI?.let { msg ->
+                                            ChatMessageBubble(msg)
+                                        }
+                                    }
+                                    "poll" -> {
+                                        item.poll?.let { poll ->
+                                            PollMessageBubble(
+                                                poll = poll,
+                                                onVote = { optionIds ->
+                                                    android.util.Log.d("ChatConversation", "📊 Vote sur poll: ${poll.id} options: $optionIds")
+                                                    viewModel.voteOnPoll(poll.id, optionIds, context)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -527,6 +640,10 @@ fun ChatConversationScreen(
                     onLocationClick = {
                         // TODO: Implémenter la localisation
                         showAttachmentOptions = false
+                    },
+                    onPollClick = {
+                        showAttachmentOptions = false
+                        showPollDialog = true
                     }
                 )
             }
@@ -729,13 +846,25 @@ fun ChatConversationScreen(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .padding(bottom = 80.dp)
-        ) { snackbarData ->
-            Snackbar(
-                snackbarData = snackbarData,
-                containerColor = Color(0xFF2d4a3e),
-                contentColor = Color.White
-            )
-        }
+        )
+    }
+
+    // ========== POLL CREATION DIALOG ==========
+    if (showPollDialog) {
+        CreatePollDialog(
+            onDismiss = { showPollDialog = false },
+            onCreatePoll = { question, options, allowMultiple ->
+                android.util.Log.d("ChatConversation", "📊 Création sondage: $question avec ${options.size} options")
+                viewModel.createPoll(
+                    sortieId = sortieId,
+                    question = question,
+                    options = options,
+                    allowMultiple = allowMultiple,
+                    context = context
+                )
+                showPollDialog = false
+            }
+        )
     }
 }
 
@@ -911,12 +1040,13 @@ fun ChatMessageBubble(message: MessageUI) {
 
 @Composable
 fun AttachmentOptionsPanel(
-    onDismiss: () -> Unit,
+    @Suppress("UNUSED_PARAMETER") onDismiss: () -> Unit,
     onImageClick: () -> Unit,
     onCameraClick: () -> Unit,
     onFileClick: () -> Unit,
     onAudioClick: () -> Unit,
-    onLocationClick: () -> Unit
+    onLocationClick: () -> Unit,
+    onPollClick: () -> Unit
 ) {
     Surface(
         modifier = Modifier
@@ -975,6 +1105,12 @@ fun AttachmentOptionsPanel(
                     color = Color(0xFF25D366),
                     onClick = onLocationClick
                 )
+                AttachmentOption(
+                    icon = Icons.Default.PieChart,
+                    label = "Sondage",
+                    color = Color(0xFFFF5722),
+                    onClick = onPollClick
+                )
             }
         }
     }
@@ -992,23 +1128,17 @@ fun AttachmentOption(
         verticalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.width(72.dp)
     ) {
-        Surface(
+        FloatingActionButton(
             onClick = onClick,
-            shape = CircleShape,
-            color = color,
+            containerColor = color,
             modifier = Modifier.size(56.dp)
         ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    icon,
-                    contentDescription = label,
-                    tint = Color.White,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = Color.White,
+                modifier = Modifier.size(28.dp)
+            )
         }
         Text(
             text = label,

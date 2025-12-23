@@ -7,8 +7,8 @@ import com.google.gson.annotations.SerializedName
 data class Point(
     @SerializedName("latitude") val latitude: Double,
     @SerializedName("longitude") val longitude: Double,
-    @SerializedName("display_name") val displayName: String? = null,  // ✅ ADDED
-    @SerializedName("address") val address: String? = null  // ✅ ADDED
+    @SerializedName("display_name") val displayName: String? = null,
+    @SerializedName("address") val address: String? = null
 )
 
 data class Itineraire(
@@ -51,14 +51,14 @@ data class Location(
     val lng: Double
 )
 
-// ============== ✅ NEW: SORTIE RESPONSE MODELS (ADD BELOW) ==============
+// ============== SORTIE RESPONSE MODELS ==============
 
 data class SortieResponse(
     @SerializedName("_id") val id: String,
     @SerializedName("titre") val titre: String,
     @SerializedName("description") val description: String,
     @SerializedName("date") val date: String,
-    @SerializedName("type") val type: String, // "RANDONNEE", "VELO", "CAMPING"
+    @SerializedName("type") val type: String,
     @SerializedName("option_camping") val optionCamping: Boolean,
     @SerializedName("createurId") val createurId: CreateurInfo,
     @SerializedName("camping") val camping: CampingInfo?,
@@ -90,8 +90,8 @@ data class CampingInfo(
 data class ItineraireInfo(
     @SerializedName("pointDepart") val pointDepart: Point,
     @SerializedName("pointArrivee") val pointArrivee: Point,
-    @SerializedName("distance") val distance: Double, // en mètres
-    @SerializedName("duree_estimee") val dureeEstimee: Double // en secondes
+    @SerializedName("distance") val distance: Double,
+    @SerializedName("duree_estimee") val dureeEstimee: Double
 )
 
 data class ParticipantInfo(
@@ -101,124 +101,158 @@ data class ParticipantInfo(
     @SerializedName("status") val status: String?
 )
 
-
-
 // ============== PARTICIPATION MODELS ==============
-
 
 data class ParticipationRequest(
     val sortieId: String
 )
 
-/**
- * Request body for updating participation status
- * PATCH /participations/{id}/status
- */
 data class UpdateParticipationStatusRequest(
-    val status: String // "ACCEPTEE" or "REFUSEE"
+    val status: String
 )
 
-/**
- * ✅ FIXED: Simple participation response (returned after POST/PATCH operations)
- * This is what you get when creating/updating - just ID strings
- */
 data class SimpleParticipationResponse(
-    @SerializedName("_id")
-    val _id: String,
-
-    val userId: String, // ← Just string ID
-
-    val sortieId: String, // ← Just string ID
-
+    @SerializedName("_id") val _id: String,
+    val userId: String,
+    val sortieId: String,
     val status: String,
-
     val createdAt: String,
-
     val updatedAt: String,
-
-    @SerializedName("__v")
-    val version: Int = 0
+    @SerializedName("__v") val version: Int = 0
 )
 
-/**
- * ✅ FIXED: Full participation response with populated user and sortie data
- * This is what you get from GET /participations?sortieId={id}
- */
 data class ParticipationResponse(
-    @SerializedName("_id")
-    val _id: String,
-
-    val userId: UserInfo, // ← Object with email
-
-    val sortieId: SortieInfo, // ← Full sortie object
-
-    val status: String, // "EN_ATTENTE", "ACCEPTEE", "REFUSEE"
-
+    @SerializedName("_id") val _id: String,
+    val userId: UserInfo,
+    val sortieId: SortieInfo,
+    val status: String,
     val createdAt: String,
-
     val updatedAt: String,
-
-    @SerializedName("__v")
-    val version: Int = 0
+    @SerializedName("__v") val version: Int = 0
 )
 
-/**
- * Simplified user info within participation response
- */
 data class UserInfo(
-    @SerializedName("_id")
-    val _id: String,
-
+    @SerializedName("_id") val _id: String,
     val email: String,
-
-    val name: String? = null // Optional if your API returns it
+    val name: String? = null
 )
 
-/**
- * Simplified sortie info within participation response
- * This matches the nested sortieId object in the API response
- */
 data class SortieInfo(
-    @SerializedName("_id")
-    val _id: String,
-
+    @SerializedName("_id") val _id: String,
     val titre: String,
-
     val description: String,
-
     val difficulte: String,
-
     val date: String,
-
     val type: String,
-
-    @SerializedName("option_camping")
-    val optionCamping: Boolean,
-
+    @SerializedName("option_camping") val optionCamping: Boolean,
     val createurId: String,
-
     val photo: String? = null,
-
     val camping: String? = null,
-
     val capacite: Int,
-
     val itineraire: Itineraire? = null,
-
     val participants: List<String> = emptyList(),
-
     val createdAt: String,
-
     val updatedAt: String,
-
-    @SerializedName("__v")
-    val version: Int = 0
+    @SerializedName("__v") val version: Int = 0
 )
 
-/**
- * Response when canceling participation
- * DELETE /participations/{id}
- */
+data class UserParticipationResponse(
+    @SerializedName("_id") val _id: String,
+    val userId: String,
+    val sortieId: UserParticipationSortieInfo?,
+    val status: String,
+    val createdAt: String,
+    val updatedAt: String,
+    @SerializedName("__v") val version: Int = 0
+)
+
+data class UserParticipationSortieInfo(
+    @SerializedName("_id") val _id: String,
+    val titre: String,
+    val type: String,
+    val date: String? = null,
+    val photo: String? = null,
+    val description: String? = null
+)
+
 data class CancelParticipationResponse(
     val message: String
+)
+
+// ============== RATING MODELS ==============
+
+/**
+ * Creator rating summary
+ * GET /ratings/creator/{userId}
+ */
+data class CreatorRatingResponse(
+    val average: Double,
+    val count: Int
+)
+
+/**
+ * Response when recomputing creator rating
+ * POST /ratings/recompute/creator/{userId}
+ */
+data class RecomputeRatingResponse(
+    @SerializedName("message")
+    val message: String
+)
+
+data class RatingItem(
+    @SerializedName("_id") val id: String,
+    @SerializedName("userId") val userId: String,
+    @SerializedName("sortieId") val sortieId: String,
+    @SerializedName("stars") val stars: Int,
+    @SerializedName("comment") val comment: String?,
+    @SerializedName("createdAt") val createdAt: String,
+    @SerializedName("updatedAt") val updatedAt: String
+)
+
+data class SortieRatingsResponse(
+    @SerializedName("ratings") val ratings: List<RatingItem>,
+    @SerializedName("total") val total: Int,
+    @SerializedName("page") val page: Int,
+    @SerializedName("limit") val limit: Int,
+    @SerializedName("totalPages") val totalPages: Int
+)
+
+data class CreateRatingRequest(
+    @SerializedName("sortieId") val sortieId: String,
+    @SerializedName("stars") val stars: Int,
+    @SerializedName("comment") val comment: String? = null
+)
+
+data class CreateRatingResponse(
+    @SerializedName("_id") val id: String,
+    @SerializedName("userId") val userId: String,
+    @SerializedName("sortieId") val sortieId: String,
+    @SerializedName("stars") val stars: Int,
+    @SerializedName("comment") val comment: String?,
+    @SerializedName("createdAt") val createdAt: String,
+    @SerializedName("updatedAt") val updatedAt: String
+)
+
+data class SortieRatingData(
+    val average: Double,
+    val count: Int
+)
+
+
+/**
+ * Eligible sortie for rating
+ * GET /ratings/eligible
+ */
+data class EligibleSortieForRating(
+    @SerializedName("sortieId")
+    val sortieId: String,
+
+    @SerializedName("title")
+    val title: String,
+
+    @SerializedName("camping")
+    val camping: Boolean,
+
+    @SerializedName("eligibleDate")
+    val eligibleDate: String
 )

@@ -35,13 +35,13 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
-import com.example.dam.NavigationRoutes
 import com.example.dam.R
 import com.example.dam.models.SortieResponse
 import com.example.dam.ui.theme.*
 import com.example.dam.utils.UserPreferences
 import com.example.dam.viewmodel.HomeExploreViewModel
 import com.example.dam.viewmodel.UserProfileViewModel
+import com.example.dam.viewmodel.SavedSortiesViewModel
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -52,7 +52,9 @@ fun HomeExploreScreen(
     viewModel: HomeExploreViewModel = viewModel(),
     userProfileViewModel: UserProfileViewModel = viewModel(
         factory = UserProfileViewModelFactory(LocalContext.current)
-    )) {
+    ),
+    savedSortiesViewModel: SavedSortiesViewModel = viewModel()
+) {
     val context = LocalContext.current
     val token = UserPreferences.getToken(context) ?: ""
     val currentUserId = UserPreferences.getUserId(context) ?: ""
@@ -66,13 +68,27 @@ fun HomeExploreScreen(
 
     val followingIds by userProfileViewModel.followingIds.collectAsState(initial = emptySet())
 
-    val baseSorties = viewModel.getFilteredSorties()
+    // Charger les sorties sauvegardées LOCALEMENT
+    LaunchedEffect(Unit) {
+        savedSortiesViewModel.loadSavedSorties(context)
+    }
 
-    val filteredSorties = remember(baseSorties, followingIds, viewModel.selectedFilter) {
-        var list = baseSorties
+    val savedSortieIds by savedSortiesViewModel.savedSortieIds.collectAsState()
 
-        if (viewModel.selectedFilter == "following" && followingIds.isNotEmpty()) {
-            list = list.filter { it.createurId.id in followingIds }
+    val filteredSorties = remember(viewModel.sorties, viewModel.selectedFilter, viewModel.searchQuery, followingIds) {
+        var list = viewModel.sorties.filter {
+            it.titre.contains(viewModel.searchQuery, ignoreCase = true) ||
+                    it.itineraire?.pointArrivee?.displayName?.contains(viewModel.searchQuery, ignoreCase = true) == true
+        }
+
+        list = when (viewModel.selectedFilter) {
+            "following" -> if (followingIds.isNotEmpty()) {
+                list.filter { it.createurId.id in followingIds }
+            } else list
+            "cycling" -> list.filter { it.type == "VELO" }
+            "hiking" -> list.filter { it.type == "RANDONNEE" }
+            "camping" -> list.filter { it.optionCamping }
+            else -> list
         }
 
         list.sortedBy {
@@ -124,7 +140,12 @@ fun HomeExploreScreen(
                             .fillMaxWidth()
                             .height(56.dp)
                             .background(
-                                Brush.horizontalGradient(listOf(GreenAccent.copy(0.1f), TealAccent.copy(0.1f))),
+                                Brush.horizontalGradient(
+                                    listOf(
+                                        GreenAccent.copy(0.1f),
+                                        TealAccent.copy(0.1f)
+                                    )
+                                ),
                                 RoundedCornerShape(28.dp)
                             )
                             .blur(4.dp)
@@ -142,20 +163,36 @@ fun HomeExploreScreen(
                                 .padding(horizontal = 16.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Search, "Search", tint = GreenAccent.copy(0.7f), modifier = Modifier.size(22.dp))
+                            Icon(
+                                Icons.Default.Search,
+                                "Search",
+                                tint = GreenAccent.copy(0.7f),
+                                modifier = Modifier.size(22.dp)
+                            )
                             BasicTextField(
                                 value = viewModel.searchQuery,
                                 onValueChange = { viewModel.updateSearchQuery(it) },
                                 modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
-                                textStyle = androidx.compose.ui.text.TextStyle(color = TextPrimary, fontSize = 16.sp),
+                                textStyle = androidx.compose.ui.text.TextStyle(
+                                    color = TextPrimary,
+                                    fontSize = 16.sp
+                                ),
                                 decorationBox = { innerTextField ->
                                     if (viewModel.searchQuery.isEmpty()) {
-                                        Text("Search adventures...", color = TextSecondary, fontSize = 16.sp)
+                                        Text(
+                                            "Search adventures...",
+                                            color = TextSecondary,
+                                            fontSize = 16.sp
+                                        )
                                     }
                                     innerTextField()
                                 }
                             )
-                            IconButton(onClick = { if (viewModel.searchQuery.isNotEmpty()) viewModel.updateSearchQuery("") }) {
+                            IconButton(onClick = {
+                                if (viewModel.searchQuery.isNotEmpty()) viewModel.updateSearchQuery(
+                                    ""
+                                )
+                            }) {
                                 Icon(
                                     imageVector = if (viewModel.searchQuery.isEmpty()) Icons.Default.Mic else Icons.Default.Clear,
                                     contentDescription = "Clear",
@@ -174,7 +211,13 @@ fun HomeExploreScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     contentPadding = PaddingValues(vertical = 4.dp)
                 ) {
-                    item { FilterPill("Explore", Icons.Default.Explore, viewModel.selectedFilter == "explore") { viewModel.setFilter("explore") } }
+                    item {
+                        FilterPill(
+                            "Explore",
+                            Icons.Default.Explore,
+                            viewModel.selectedFilter == "explore"
+                        ) { viewModel.setFilter("explore") }
+                    }
                     item {
                         FilterPill(
                             "Recommended",
@@ -184,10 +227,34 @@ fun HomeExploreScreen(
                             navController.navigate("recommendation_hub")
                         }
                     }
-                    item { FilterPill("Following", Icons.Default.Favorite, viewModel.selectedFilter == "following") { viewModel.setFilter("following") } }
-                    item { FilterPill("Cycling", Icons.Default.DirectionsBike, viewModel.selectedFilter == "cycling") { viewModel.setFilter("cycling") } }
-                    item { FilterPill("Hiking", Icons.Default.Hiking, viewModel.selectedFilter == "hiking") { viewModel.setFilter("hiking") } }
-                    item { FilterPill("Camping", Icons.Default.Terrain, viewModel.selectedFilter == "camping") { viewModel.setFilter("camping") } }
+                    item {
+                        FilterPill(
+                            "Following",
+                            Icons.Default.Favorite,
+                            viewModel.selectedFilter == "following"
+                        ) { viewModel.setFilter("following") }
+                    }
+                    item {
+                        FilterPill(
+                            "Cycling",
+                            Icons.Default.DirectionsBike,
+                            viewModel.selectedFilter == "cycling"
+                        ) { viewModel.setFilter("cycling") }
+                    }
+                    item {
+                        FilterPill(
+                            "Hiking",
+                            Icons.Default.Hiking,
+                            viewModel.selectedFilter == "hiking"
+                        ) { viewModel.setFilter("hiking") }
+                    }
+                    item {
+                        FilterPill(
+                            "Camping",
+                            Icons.Default.Terrain,
+                            viewModel.selectedFilter == "camping"
+                        ) { viewModel.setFilter("camping") }
+                    }
                 }
             }
 
@@ -195,17 +262,34 @@ fun HomeExploreScreen(
             Box(modifier = Modifier.fillMaxSize().nestedScroll(pullToRefreshState.nestedScrollConnection)) {
                 when {
                     viewModel.isLoading && viewModel.sorties.isEmpty() -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                CircularProgressIndicator(color = GreenAccent, strokeWidth = 3.dp, modifier = Modifier.size(48.dp))
-                                Text("Chargement des aventures...", color = TextSecondary, fontSize = 14.sp)
+                                CircularProgressIndicator(
+                                    color = GreenAccent,
+                                    strokeWidth = 3.dp,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Text(
+                                    "Chargement des aventures...",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp
+                                )
                             }
                         }
                     }
 
                     filteredSorties.isEmpty() -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(32.dp)) {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(32.dp)
+                            ) {
                                 Icon(
                                     imageVector = if (viewModel.selectedFilter == "following") Icons.Default.PeopleAlt else Icons.Default.SearchOff,
                                     contentDescription = null,
@@ -240,11 +324,22 @@ fun HomeExploreScreen(
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             items(filteredSorties) { sortie ->
+                                val isSaved = sortie.id in savedSortieIds
                                 ModernEventCard(
                                     sortie = sortie,
                                     isFollowingCreator = sortie.createurId.id in followingIds,
                                     onClick = { navController.navigate("sortieDetail/${sortie.id}") },
-                                    onUserClick = { navController.navigate("userProfile/${sortie.createurId.id}") }
+                                    onUserClick = { navController.navigate("userProfile/${sortie.createurId.id}") },
+                                    onBookmarkClick = {
+                                        if (isSaved) {
+                                            // Supprimer de la liste sauvegardée LOCALEMENT
+                                            savedSortiesViewModel.removeSavedSortie(context, sortie.id)
+                                        } else {
+                                            // Ajouter à la liste sauvegardée LOCALEMENT
+                                            savedSortiesViewModel.saveSortie(context, sortie)
+                                        }
+                                    },
+                                    isBookmarked = isSaved
                                 )
                             }
                             item { Spacer(modifier = Modifier.height(100.dp)) }
@@ -255,9 +350,7 @@ fun HomeExploreScreen(
                 if (pullToRefreshState.isRefreshing || pullToRefreshState.progress > 0f) {
                     PullToRefreshContainer(
                         state = pullToRefreshState,
-                        modifier = Modifier.align(Alignment.TopCenter),
-                        containerColor = CardDark,
-                        contentColor = GreenAccent
+                        modifier = Modifier.align(Alignment.TopCenter)
                     )
                 }
             }
@@ -265,29 +358,34 @@ fun HomeExploreScreen(
     }
 }
 
-// === CARTE MODERNE AVEC BADGE "SUIVI" ===
 @Composable
 fun ModernEventCard(
     sortie: SortieResponse,
     isFollowingCreator: Boolean = false,
     onClick: () -> Unit,
-    onUserClick: ((String) -> Unit)? = null
+    onUserClick: ((String) -> Unit)? = null,
+    onBookmarkClick: (() -> Unit)? = null,
+    isBookmarked: Boolean = false
 ) {
+    val context = LocalContext.current
+
     fun formatDate(dateString: String): String = try {
-        val input = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
+        val input = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        input.timeZone = TimeZone.getTimeZone("UTC")
         val output = SimpleDateFormat("MMM dd, yyyy", Locale.getDefault())
         input.parse(dateString)?.let { output.format(it) } ?: dateString
-    } catch (e: Exception) { dateString }
+    } catch (e: Exception) {
+        dateString
+    }
 
     fun formatTime(dateString: String): String = try {
-        val input = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault()).apply {
-            timeZone = TimeZone.getTimeZone("UTC")
-        }
+        val input = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        input.timeZone = TimeZone.getTimeZone("UTC")
         val output = SimpleDateFormat("HH:mm", Locale.getDefault())
-        input.parse(dateString)?.let { output.format(it) } ?: ""
-    } catch (e: Exception) { "" }
+        input.parse(dateString)?.let { output.format(it) } ?: dateString
+    } catch (e: Exception) {
+        dateString
+    }
 
     fun getDifficultyColor(type: String) = when (type) {
         "RANDONNEE" -> WarningOrange
@@ -321,7 +419,14 @@ fun ModernEventCard(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(CardDark.copy(0.4f), CardDark.copy(0.6f))))
+                .background(
+                    Brush.verticalGradient(
+                        listOf(
+                            CardDark.copy(0.4f),
+                            CardDark.copy(0.6f)
+                        )
+                    )
+                )
         ) {
             Box(modifier = Modifier.fillMaxWidth().height(176.dp)) {
                 if (sortie.photo?.isNotEmpty() == true) {
@@ -342,11 +447,20 @@ fun ModernEventCard(
                     )
                 }
 
-                Box(modifier = Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(0.8f)))))
+                Box(
+                    modifier = Modifier.fillMaxSize().background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Color.Black.copy(0.8f))
+                        )
+                    )
+                )
 
-                // Badges
+                // Type Badge
                 Box(modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)) {
-                    Surface(shape = RoundedCornerShape(12.dp), color = getDifficultyColor(sortie.type).copy(0.9f)) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = getDifficultyColor(sortie.type).copy(0.9f)
+                    ) {
                         Text(
                             text = formatType(sortie.type),
                             color = Color.White,
@@ -357,6 +471,7 @@ fun ModernEventCard(
                     }
                 }
 
+                // Camping Option Badge
                 if (sortie.optionCamping) {
                     Surface(
                         modifier = Modifier.align(Alignment.TopStart).padding(12.dp),
@@ -364,42 +479,90 @@ fun ModernEventCard(
                         color = SuccessGreen.copy(0.9f),
                         border = BorderStroke(1.dp, Color.White.copy(0.3f))
                     ) {
-                        Row(modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Icon(Icons.Default.Terrain, "Camping", tint = Color.White, modifier = Modifier.size(14.dp))
-                            Text("Camping", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Terrain,
+                                "Camping",
+                                tint = Color.White,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Text(
+                                "Camping",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                         }
                     }
                 }
 
+                // Participants Badge
                 Surface(
                     modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp),
                     shape = RoundedCornerShape(20.dp),
                     color = Color.Black.copy(0.6f),
                     border = BorderStroke(1.dp, BorderColor)
                 ) {
-                    Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Default.Group, "Participants", tint = GreenAccent, modifier = Modifier.size(14.dp))
-                        Text("${sortie.participants.size}/${sortie.capacite}", color = TextPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Group,
+                            "Participants",
+                            tint = GreenAccent,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Text(
+                            "${sortie.participants.size}/${sortie.capacite}",
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
 
-            Column(modifier = Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Column(
+                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
                         Box(
                             modifier = Modifier
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .border(2.dp, GreenAccent.copy(0.5f), CircleShape)
-                                .background(Brush.linearGradient(listOf(GreenAccent, TealAccent)))
-                                .clickable { onUserClick?.invoke(sortie.createurId.id) },
+                                .background(
+                                    Brush.linearGradient(
+                                        listOf(
+                                            GreenAccent,
+                                            TealAccent
+                                        )
+                                    )
+                                )
+                                .clickable {
+                                    onUserClick?.invoke(sortie.createurId.id)
+                                },
                             contentAlignment = Alignment.Center
                         ) {
                             val avatar = sortie.createurId.avatar
                             if (avatar?.isNotEmpty() == true) {
                                 AsyncImage(
-                                    model = ImageRequest.Builder(LocalContext.current).data(avatar).crossfade(true).build(),
+                                    model = ImageRequest.Builder(context).data(avatar)
+                                        .crossfade(true).build(),
                                     contentDescription = "Avatar",
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop,
@@ -408,14 +571,14 @@ fun ModernEventCard(
                                 )
                             } else {
                                 Text(
-                                    text = sortie.createurId.email.firstOrNull()?.uppercaseChar()?.toString() ?: "?",
+                                    text = sortie.createurId.email.firstOrNull()?.uppercaseChar()
+                                        ?.toString() ?: "?",
                                     color = Color.White,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
 
-                            // BADGE "SUIVI"
                             if (isFollowingCreator) {
                                 Box(
                                     modifier = Modifier
@@ -426,15 +589,34 @@ fun ModernEventCard(
                                         .border(2.dp, CardDark, CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Icon(Icons.Default.Check, "Suivi", tint = Color.White, modifier = Modifier.size(12.dp))
+                                    Icon(
+                                        Icons.Default.Check,
+                                        "Suivi",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp)
+                                    )
                                 }
                             }
                         }
 
                         Column(modifier = Modifier.weight(1f)) {
-                            Text(sortie.titre, color = TextPrimary, fontSize = 16.sp, fontWeight = FontWeight.Bold, maxLines = 1)
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Icon(Icons.Default.LocationOn, "Location", tint = GreenAccent.copy(0.8f), modifier = Modifier.size(14.dp))
+                            Text(
+                                sortie.titre,
+                                color = TextPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                maxLines = 1
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Icon(
+                                    Icons.Default.LocationOn,
+                                    "Location",
+                                    tint = GreenAccent.copy(0.8f),
+                                    modifier = Modifier.size(14.dp)
+                                )
                                 Text(
                                     text = sortie.itineraire?.pointArrivee?.address?.takeIf { it.isNotEmpty() }
                                         ?: sortie.itineraire?.pointArrivee?.displayName?.takeIf { it.isNotEmpty() }
@@ -446,25 +628,62 @@ fun ModernEventCard(
                             }
                         }
                     }
-                    IconButton(onClick = { /* TODO: Favoris */ }) {
-                        Icon(Icons.Default.BookmarkBorder, "Bookmark", tint = GreenAccent.copy(0.6f))
+                    IconButton(onClick = { onBookmarkClick?.invoke() }) {
+                        Icon(
+                            imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = if (isBookmarked) "Saved" else "Save",
+                            tint = if (isBookmarked) GreenAccent else GreenAccent.copy(0.6f)
+                        )
                     }
                 }
 
-                Divider(color = BorderColor, thickness = 1.dp)
+                HorizontalDivider(color = BorderColor, thickness = 1.dp)
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.weight(1f)) {
-                        Icon(Icons.Default.CalendarToday, "Date", tint = GreenAccent, modifier = Modifier.size(16.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            Icons.Default.CalendarToday,
+                            contentDescription = "Date",
+                            tint = GreenAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
                         Column {
-                            Text(formatDate(sortie.date), color = TextSecondary, fontSize = 12.sp)
-                            Text(formatTime(sortie.date), color = TextTertiary, fontSize = 11.sp)
+                            Text(
+                                formatDate(sortie.date),
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                formatTime(sortie.date),
+                                color = TextTertiary,
+                                fontSize = 11.sp
+                            )
                         }
                     }
                     Box(modifier = Modifier.width(1.dp).height(24.dp).background(BorderColor))
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Icon(Icons.Default.Route, "Distance", tint = GreenAccent, modifier = Modifier.size(16.dp))
-                        Text("${sortie.itineraire?.distance?.div(1000) ?: 0} km", color = TextSecondary, fontSize = 13.sp)
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Route,
+                            "Distance",
+                            tint = GreenAccent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            "${sortie.itineraire?.distance?.div(1000) ?: 0} km",
+                            color = TextSecondary,
+                            fontSize = 13.sp
+                        )
                     }
                 }
             }
@@ -472,7 +691,6 @@ fun ModernEventCard(
     }
 }
 
-// === FILTER PILL ===
 @Composable
 fun FilterPill(
     text: String,
@@ -484,22 +702,40 @@ fun FilterPill(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
         color = if (isSelected) GreenAccent.copy(0.2f) else CardGlass,
-        border = BorderStroke(width = if (isSelected) 1.5.dp else 1.dp, color = if (isSelected) GreenAccent else BorderColor),
+        border = BorderStroke(
+            width = if (isSelected) 1.5.dp else 1.dp,
+            color = if (isSelected) GreenAccent else BorderColor
+        ),
         modifier = Modifier.height(40.dp)
     ) {
         Row(
             modifier = Modifier
                 .background(
                     if (isSelected)
-                        Brush.horizontalGradient(listOf(GreenAccent.copy(0.15f), TealAccent.copy(0.15f)))
+                        Brush.horizontalGradient(
+                            listOf(
+                                GreenAccent.copy(0.15f),
+                                TealAccent.copy(0.15f)
+                            )
+                        )
                     else
-                        Brush.horizontalGradient(listOf(CardDark.copy(0.3f), CardDark.copy(0.3f)))
+                        Brush.horizontalGradient(
+                            listOf(
+                                CardDark.copy(0.3f),
+                                CardDark.copy(0.3f)
+                            )
+                        )
                 )
                 .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(icon, contentDescription = text, tint = if (isSelected) GreenAccent else TextSecondary, modifier = Modifier.size(16.dp))
+            Icon(
+                icon,
+                contentDescription = text,
+                tint = if (isSelected) GreenAccent else TextSecondary,
+                modifier = Modifier.size(16.dp)
+            )
             Text(
                 text = text,
                 color = if (isSelected) GreenAccent else TextSecondary,
@@ -510,9 +746,6 @@ fun FilterPill(
     }
 }
 
-
-
-// AJOUTE ÇA À LA FIN DU FICHIER HomeExploreScreen.kt
 class UserProfileViewModelFactory(private val context: Context) : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(UserProfileViewModel::class.java)) {

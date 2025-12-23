@@ -130,6 +130,22 @@ interface AuthApiService {
         @Header("Authorization") token: String
     ): Response<OnboardingPreferencesResponse>
 
+
+
+    // ✅ AJOUTEZ CETTE FONCTION ICI
+    /**
+     * Get user preferences
+     * GET /preferences/{userId}
+     */
+    @GET("preferences/{userId}")
+    suspend fun getPreferences(
+        @Path("userId") userId: String,
+        @Header("Authorization") token: String
+    ): Response<OnboardingPreferencesResponse>
+
+
+
+
     @Multipart
     @POST("user/{id}/upload")
     suspend fun uploadAvatar(
@@ -215,6 +231,9 @@ interface AuthApiService {
         @Query("limit") limit: Int = 5,
         @Header("Authorization") token: String
     ): Response<FollowSuggestionsResponse>
+
+
+
 
 
 

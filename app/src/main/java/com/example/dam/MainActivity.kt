@@ -34,6 +34,7 @@ import com.example.dam.Screens.OnboardingScreen
 import com.example.dam.Screens.SortieDetailScreen
 
 
+
 import com.example.dam.Screens.*
 import com.example.dam.Screens.FeedScreen
 import com.example.dam.ui.theme.DamTheme
@@ -46,10 +47,32 @@ import com.google.android.gms.maps.MapsInitializer
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
+// ✅ IMPORTS POUR LES NOTIFICATIONS
+import com.example.dam.services.NotificationPollingService
+import com.example.dam.utils.NotificationHelper
+import com.example.dam.utils.UserPreferences
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.content.ContextCompat
+
 
 class MainActivity : ComponentActivity() {
 
     private lateinit var googleSignInClient: GoogleSignInClient
+
+    // ✅ Launcher pour demander la permission de notification (Android 13+)
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            Log.d("MainActivity", "✅ Notification permission granted")
+        } else {
+            Log.w("MainActivity", "⚠️ Notification permission denied")
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -87,13 +110,92 @@ class MainActivity : ComponentActivity() {
 
         googleSignInClient = GoogleSignIn.getClient(this, gso)
 
+        // ✅ INITIALISER LE SYSTÈME DE NOTIFICATION
+        initializeNotificationSystem()
 
+        // ✅ GÉRER LES DEEP LINKS (notifications tapées)
+        handleNotificationIntent(intent)
 
         setContent {
             DamTheme {
                 CycleApp(googleSignInClient = googleSignInClient, activity = this)
             }
         }
+    }
+
+    // ✅ Gérer les nouveaux intents (quand l'app est déjà ouverte)
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.let { handleNotificationIntent(it) }
+    }
+
+    /**
+     * Initialise le système de notification
+     */
+    private fun initializeNotificationSystem() {
+        // Créer le canal de notification
+        NotificationHelper.createNotificationChannel(this)
+
+        // Demander la permission pour Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(
+                    this,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) != PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+
+        // Démarrer le polling si l'utilisateur est connecté
+        val token = UserPreferences.getToken(this)
+        if (!token.isNullOrEmpty()) {
+            Log.d("MainActivity", "🚀 User logged in, starting notification polling")
+            NotificationPollingService.startPolling(this, intervalSeconds = 15)
+        } else {
+            Log.d("MainActivity", "⚠️ No token found, polling will start after login")
+        }
+    }
+
+    /**
+     * Gère les deep links depuis les notifications
+     */
+    private fun handleNotificationIntent(intent: Intent) {
+        val notificationType = intent.getStringExtra("notification_type") ?: return
+
+        Log.d("MainActivity", "📲 Deep link detected: $notificationType")
+
+        // TODO: Navigator vers l'écran approprié selon le type
+        // Cette logique sera implémentée dans le NavController
+        when (notificationType) {
+            "NEW_PUBLICATION" -> {
+                val publicationId = intent.getStringExtra("publicationId")
+                Log.d("MainActivity", "→ Navigate to feed (publication list): $publicationId")
+                // Redirection vers l'écran feed car pas d'écran détail publication
+                // TODO: Implémenter la navigation vers feed quand NavController sera disponible
+            }
+            "CHAT_MESSAGE" -> {
+                val sortieId = intent.getStringExtra("sortieId")
+                Log.d("MainActivity", "→ Navigate to chat: $sortieId")
+                // Exemple: navController.navigate("chatConversation/$sortieId")
+            }
+            "NEW_SORTIE" -> {
+                val sortieId = intent.getStringExtra("sortieId")
+                Log.d("MainActivity", "→ Navigate to sortie: $sortieId")
+                // Exemple: navController.navigate("sortieDetail/$sortieId")
+            }
+            "PARTICIPATION_ACCEPTED", "PARTICIPATION_REJECTED" -> {
+                val sortieId = intent.getStringExtra("sortieId")
+                Log.d("MainActivity", "→ Navigate to sortie: $sortieId")
+                // Exemple: navController.navigate("sortieDetail/$sortieId")
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        // Arrêter le polling si l'app est fermée
+        NotificationPollingService.stopPolling()
     }
 }
 
@@ -301,17 +403,23 @@ fun NavigationGraph(
             RecommendationHubScreen(navController = navController)
         }
 
-        composable(NavigationRoutes.PREFERENCE_RECOMMENDATIONS) {
-            PreferenceRecommendationsScreen(navController = navController)
+        // ✅ NEW: Flask AI Recommendations
+        composable(NavigationRoutes.FLASK_RECOMMENDATIONS) {
+            FlaskAiRecommendationsScreen(navController = navController)
         }
 
-        composable(NavigationRoutes.WEATHER_RECOMMENDATIONS) {
-            WeatherRecommendationsScreen(navController = navController)
+        // ✅ NEW: Flask Matchmaking
+        composable(NavigationRoutes.FLASK_MATCHMAKING) {
+            FlaskMatchmakingScreen(navController = navController)
         }
 
-        composable(NavigationRoutes.SMART_MATCHES) {
-            SmartMatchesScreen(navController = navController)
+        composable("flask_itinerary") {
+            FlaskItineraryScreen(navController = navController)
         }
+
+
+
+
     }
 }
 // ✅ Routes mises à jour
@@ -336,12 +444,18 @@ object NavigationRoutes {
     const val PREFERENCE_RECOMMENDATIONS = "preference_recommendations"
     const val WEATHER_RECOMMENDATIONS = "weather_recommendations"
     const val SMART_MATCHES = "smart_matches"
-    const val PARTICIPATION_REQUESTS = "participation_requests/{sortieId}"
+
+    // ✅ NEW: Flask AI Routes
+    const val FLASK_RECOMMENDATIONS = "flask_recommendations"
+    const val FLASK_MATCHMAKING = "flask_matchmaking"
 
     // ← NEW: Accept token
     const val CREATE = "createadventure/{token}"
     const val USER_PROFILE = "userProfile/{userId}"
     const val MESSAGES = "messages"
+
+    // ✅ Route pour les notifications
+    const val NOTIFICATIONS = "notifications"
 
     // Helper functions
     fun createAdventureRoute(token: String) = "createadventure/$token"

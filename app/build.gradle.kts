@@ -146,5 +146,8 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.2")
 
 
+    implementation("com.google.maps.android:android-maps-utils:3.0.0")
 
+    // WorkManager pour le polling des notifications
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
 }

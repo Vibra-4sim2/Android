@@ -18,12 +18,21 @@ object SocketService {
 
     private const val TAG = "SocketService"
 
-    // ✅ CORRIGÉ: URL du serveur déployé sur Render
+
     private const val BASE_URL = "https://dam-4sim2.onrender.com"
     private const val SOCKET_NAMESPACE = "/chat"
 
     private var socket: Socket? = null
+    // ✅ CORRIGÉ: URL du serveur déployé sur Render
 
+
+
+
+    //private const val BASE_URL = "http://192.168.1.169:3000/"
+    // private const val BASE_URL = "http://10.0.2.2:3000/"
+
+
+    // private const val BASE_URL = "http://192.168.1.169:3000/"
     // ✅ CORRIGÉ: Gson avec gestion des nulls
     private val gson: Gson = GsonBuilder()
         .setLenient()
@@ -37,6 +46,11 @@ object SocketService {
     var onError: ((String) -> Unit)? = null
     var onUserTyping: ((String, Boolean) -> Unit)? = null
     var onMessageSent: ((String, Boolean) -> Unit)? = null
+
+    // ========== POLL CALLBACKS ==========
+    var onPollCreated: ((String) -> Unit)? = null  // pollId
+    var onPollUpdated: ((String) -> Unit)? = null  // pollId (après un vote)
+    var onPollClosed: ((String) -> Unit)? = null   // pollId
 
     /**
      * Se connecter au serveur WebSocket
@@ -89,6 +103,9 @@ object SocketService {
             off("userTyping")
             off("messageRead")
             off("error")
+            off("pollCreated")
+            off("pollUpdated")
+            off("pollClosed")
 
             // Puis ajouter les nouveaux listeners
             on(Socket.EVENT_CONNECT, onConnect)
@@ -101,8 +118,11 @@ object SocketService {
             on("userTyping", onUserTypingEvent)
             on("messageRead", onMessageReadEvent)
             on("error", onErrorEvent)
+            on("pollCreated", onPollCreatedEvent)
+            on("pollUpdated", onPollUpdatedEvent)
+            on("pollClosed", onPollClosedEvent)
 
-            Log.d(TAG, "✅ Listeners configurés (doublons évités)")
+            Log.d(TAG, "✅ Listeners configurés (doublons évités + polls)")
         }
     }
 
@@ -383,5 +403,73 @@ object SocketService {
         Log.e(TAG, "========================================")
 
         onError?.invoke(message)
+    }
+
+    // ========== POLL EVENTS ==========
+
+    private val onPollCreatedEvent = Emitter.Listener { args ->
+        try {
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "📊 EVENT: pollCreated")
+            Log.d(TAG, "========================================")
+
+            val data = args.getOrNull(0) as? JSONObject
+            val pollId = data?.optString("pollId")
+            val sortieId = data?.optString("sortieId")
+
+            Log.d(TAG, "📊 New poll created: $pollId in sortie: $sortieId")
+
+            if (pollId != null) {
+                onPollCreated?.invoke(pollId)
+            }
+
+            Log.d(TAG, "========================================")
+        } catch (e: Exception) {
+            Log.e(TAG, "💥 Error parsing pollCreated: ${e.message}", e)
+        }
+    }
+
+    private val onPollUpdatedEvent = Emitter.Listener { args ->
+        try {
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "📊 EVENT: pollUpdated")
+            Log.d(TAG, "========================================")
+
+            val data = args.getOrNull(0) as? JSONObject
+            val pollId = data?.optString("pollId")
+            val sortieId = data?.optString("sortieId")
+
+            Log.d(TAG, "📊 Poll updated: $pollId in sortie: $sortieId")
+
+            if (pollId != null) {
+                onPollUpdated?.invoke(pollId)
+            }
+
+            Log.d(TAG, "========================================")
+        } catch (e: Exception) {
+            Log.e(TAG, "💥 Error parsing pollUpdated: ${e.message}", e)
+        }
+    }
+
+    private val onPollClosedEvent = Emitter.Listener { args ->
+        try {
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "📊 EVENT: pollClosed")
+            Log.d(TAG, "========================================")
+
+            val data = args.getOrNull(0) as? JSONObject
+            val pollId = data?.optString("pollId")
+            val sortieId = data?.optString("sortieId")
+
+            Log.d(TAG, "📊 Poll closed: $pollId in sortie: $sortieId")
+
+            if (pollId != null) {
+                onPollClosed?.invoke(pollId)
+            }
+
+            Log.d(TAG, "========================================")
+        } catch (e: Exception) {
+            Log.e(TAG, "💥 Error parsing pollClosed: ${e.message}", e)
+        }
     }
 }

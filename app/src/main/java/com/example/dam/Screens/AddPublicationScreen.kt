@@ -5,8 +5,6 @@ import android.net.Uri
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.*
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,23 +39,22 @@ import com.example.dam.ui.theme.SuccessGreen
 import com.example.dam.viewmodel.AddPublicationViewModel
 import com.example.dam.viewmodel.AddPublicationUiState
 
-// Couleurs
-private val BackgroundDark = Color(0xFF0F0F0F)
-private val CardBackground = Color(0xFF1A1A1A)
+// Couleurs - Palette élégante et minimaliste
+private val BackgroundDark = Color(0xFF0A0A0A)
+private val CardBackground = Color(0xFF1C1C1E)
+private val CardBackgroundLight = Color(0xFF2C2C2E)
 private val GreenAccent = Color(0xFF4ADE80)
 private val TextPrimary = Color(0xFFFFFFFF)
-private val TextSecondary = Color(0xFF9CA3AF)
-private val TextTertiary = Color(0xFF6B7280)   // 👈 AJOUTER
-
-private val RedAccent = Color(0xFFEF4444)
+private val TextSecondary = Color(0xFF8E8E93)
+private val TextTertiary = Color(0xFF636366)
+private val RedAccent = Color(0xFFFF3B30)
+private val DividerColor = Color(0xFF38383A)
 
 // ==================== UI PRINCIPALE ====================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddPublicationScreen(navController: NavHostController) {
     val context = LocalContext.current
-    var showSuccessDialog by remember { mutableStateOf(false) }
-
 
     // ✅ UTILISE LE BON VIEWMODEL (celui avec UserPreferences)
     val viewModel: AddPublicationViewModel = viewModel(
@@ -81,25 +78,71 @@ fun AddPublicationScreen(navController: NavHostController) {
     var showMentionDialog by remember { mutableStateOf(false) }
     var showTagDialog by remember { mutableStateOf(false) }
 
+    // 🆕 Récupérer les informations de l'utilisateur connecté
+    var userName by remember { mutableStateOf("Loading...") }
+    var userAvatar by remember { mutableStateOf<String?>(null) }
+    var userInitials by remember { mutableStateOf("") }
 
-    // Observe the UI state for success
-    LaunchedEffect(uiState) {
-        if (uiState is AddPublicationUiState.Success) {
-            showSuccessDialog = true
+    LaunchedEffect(Unit) {
+        val userId = com.example.dam.utils.UserPreferences.getUserId(context)
+        val token = com.example.dam.utils.UserPreferences.getToken(context)
+
+        if (userId != null && token != null) {
+            try {
+                val apiService = com.example.dam.remote.RetrofitInstance.authApi
+                val response = apiService.getUserById(userId, "Bearer $token")
+
+                if (response.isSuccessful && response.body() != null) {
+                    val user = response.body()!!
+                    userName = "${user.firstName} ${user.lastName}"
+                    userAvatar = user.avatar
+                    userInitials = "${user.firstName.firstOrNull() ?: ""}${user.lastName.firstOrNull() ?: ""}".uppercase()
+                    Log.d("AddPublicationScreen", "✅ User loaded: $userName")
+                } else {
+                    userName = "Your Name"
+                    userInitials = "YO"
+                }
+            } catch (e: Exception) {
+                Log.e("AddPublicationScreen", "❌ Error loading user", e)
+                userName = "Your Name"
+                userInitials = "YO"
+            }
         }
     }
 
-    // Gérer les états de succès/erreur
+    // 🚨 Navigation automatique après succès
     LaunchedEffect(uiState) {
+        Log.d("AddPublicationScreen", "🔄 UI State changed: $uiState")
         when (val state = uiState) {
             is AddPublicationUiState.Success -> {
-                Log.d("AddPublication", "✅ Success! Navigating back...")
-                navController.popBackStack()
+                Log.d("AddPublicationScreen", "✅ SUCCESS! Publication ID: ${state.publicationId}")
+                Log.d("AddPublicationScreen", "🚀 Navigating to feed...")
+
+                // Petit délai pour laisser l'UI se stabiliser
+                kotlinx.coroutines.delay(300)
+
+                // Navigation simple vers feed en supprimant addpublication du backstack
+                navController.navigate("feed") {
+                    // Supprimer TOUT jusqu'à home, puis aller à feed
+                    popUpTo("home") {
+                        inclusive = false
+                    }
+                    launchSingleTop = true
+                }
+
+                // Reset l'état après navigation
+                kotlinx.coroutines.delay(100)
+                viewModel.resetUiState()
             }
             is AddPublicationUiState.Error -> {
-                Log.e("AddPublication", "❌ Error: ${state.message}")
+                Log.e("AddPublicationScreen", "❌ Error: ${state.message}")
             }
-            else -> {}
+            is AddPublicationUiState.Loading -> {
+                Log.d("AddPublicationScreen", "⏳ Loading...")
+            }
+            is AddPublicationUiState.Idle -> {
+                Log.d("AddPublicationScreen", "💤 Idle")
+            }
         }
     }
 
@@ -132,77 +175,116 @@ fun AddPublicationScreen(navController: NavHostController) {
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Avatar + Nom
+            // Avatar + Nom - Design amélioré avec vraies données utilisateur
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(bottom = 16.dp)
+                modifier = Modifier
+                    .padding(bottom = 20.dp)
+                    .fillMaxWidth()
             ) {
+                // Avatar cliquable → Profile
                 Box(
                     modifier = Modifier
-                        .size(50.dp)
-                        .border(2.dp, GreenAccent.copy(alpha = 0.3f), CircleShape)
-                        .padding(3.dp)
+                        .size(52.dp)
+                        .shadow(8.dp, CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                colors = listOf(
+                                    GreenAccent.copy(alpha = 0.3f),
+                                    GreenAccent.copy(alpha = 0.1f)
+                                )
+                            ),
+                            CircleShape
+                        )
+                        .border(1.5.dp, GreenAccent.copy(alpha = 0.4f), CircleShape)
+                        .clickable {
+                            // Navigation vers le profil
+                            navController.navigate("profile")
+                        }
+                        .padding(2.dp)
                 ) {
                     Surface(
                         modifier = Modifier.fillMaxSize(),
                         shape = CircleShape,
-                        color = Color(0xFF374151)
+                        color = CardBackgroundLight
                     ) {
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize()
-                        ) {
-                            Text(
-                                text = "YO",
-                                color = GreenAccent,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold
-                            )
+                        if (userAvatar != null && userAvatar!!.isNotEmpty()) {
+                            // TODO: Charger l'image avec Coil si vous avez la lib
+                            // AsyncImage(model = userAvatar, ...)
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Text(
+                                    text = userInitials,
+                                    color = GreenAccent,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        } else {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Text(
+                                    text = userInitials,
+                                    color = GreenAccent,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Spacer(modifier = Modifier.width(14.dp))
 
                 Column {
                     Text(
-                        text = "Your Name",
+                        text = userName,
                         color = TextPrimary,
-                        fontSize = 16.sp,
-                        fontWeight = FontWeight.Bold
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.SemiBold
                     )
-                    Text(
-                        text = "Public post",
-                        color = TextSecondary,
-                        fontSize = 13.sp
-                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Public,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "Public post",
+                            color = TextSecondary,
+                            fontSize = 13.sp
+                        )
+                    }
                 }
             }
 
-            // Zone de texte
+            // Zone de texte - Design moderne et minimaliste
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 180.dp),
+                    .heightIn(min = 160.dp),
                 shape = RoundedCornerShape(20.dp),
-                color = CardBackground.copy(alpha = 0.6f)
+                color = Color.Transparent
             ) {
                 Box(
                     modifier = Modifier
                         .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color(0xFF1A1A1A).copy(alpha = 0.8f),
-                                    Color(0xFF151515).copy(alpha = 0.6f)
-                                )
-                            )
+                            CardBackground.copy(alpha = 0.4f),
+                            RoundedCornerShape(20.dp)
                         )
                         .border(
                             width = 1.dp,
-                            color = Color.White.copy(alpha = 0.1f),
+                            color = Color.White.copy(alpha = 0.05f),
                             shape = RoundedCornerShape(20.dp)
                         )
-                        .padding(16.dp)
+                        .padding(18.dp)
                 ) {
                     TextField(
                         value = contentText,
@@ -210,8 +292,10 @@ fun AddPublicationScreen(navController: NavHostController) {
                         modifier = Modifier.fillMaxWidth(),
                         placeholder = {
                             Text(
-                                text = "What's on your mind? Share your cycling journey...",
-                                color = TextSecondary.copy(alpha = 0.6f)
+                                text = "What's on your mind?\nShare your cycling story, tips, or adventures...",
+                                color = TextSecondary.copy(alpha = 0.6f),
+                                lineHeight = 22.sp,
+                                fontSize = 15.sp
                             )
                         },
                         colors = TextFieldDefaults.colors(
@@ -225,42 +309,78 @@ fun AddPublicationScreen(navController: NavHostController) {
                         ),
                         textStyle = LocalTextStyle.current.copy(
                             fontSize = 15.sp,
-                            lineHeight = 22.sp
+                            lineHeight = 22.sp,
+                            fontWeight = FontWeight.Normal
                         )
                     )
                 }
             }
 
-            // Image preview
+            // Image preview - Design amélioré
             selectedImageUri?.let { uri ->
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(20.dp))
                 Box {
                     Surface(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(250.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        color = Color(0xFF374151)
+                            .height(220.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        color = Color.Transparent
                     ) {
                         Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            CardBackgroundLight.copy(alpha = 0.6f),
+                                            CardBackgroundLight.copy(alpha = 0.4f)
+                                        )
+                                    ),
+                                    RoundedCornerShape(24.dp)
+                                )
+                                .border(
+                                    width = 1.5.dp,
+                                    color = GreenAccent.copy(alpha = 0.2f),
+                                    shape = RoundedCornerShape(24.dp)
+                                ),
+                            contentAlignment = Alignment.Center
                         ) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Icon(
-                                    imageVector = Icons.Outlined.Image,
-                                    contentDescription = "Selected image",
-                                    tint = GreenAccent,
-                                    modifier = Modifier.size(64.dp)
-                                )
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .size(80.dp)
+                                        .background(
+                                            Brush.radialGradient(
+                                                colors = listOf(
+                                                    GreenAccent.copy(alpha = 0.2f),
+                                                    Color.Transparent
+                                                )
+                                            ),
+                                            CircleShape
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Image,
+                                        contentDescription = "Selected image",
+                                        tint = GreenAccent,
+                                        modifier = Modifier.size(44.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(16.dp))
                                 Text(
                                     text = "Image Selected",
                                     color = TextPrimary,
-                                    fontSize = 15.sp,
-                                    fontWeight = FontWeight.Medium
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Ready to share",
+                                    color = TextSecondary,
+                                    fontSize = 13.sp
                                 )
                             }
                         }
@@ -270,10 +390,10 @@ fun AddPublicationScreen(navController: NavHostController) {
                         onClick = { viewModel.selectImage(null) },
                         modifier = Modifier
                             .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(36.dp)
+                            .padding(12.dp)
+                            .size(38.dp)
+                            .shadow(8.dp, CircleShape)
                             .background(RedAccent, CircleShape)
-                            .shadow(4.dp, CircleShape)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
@@ -300,194 +420,123 @@ fun AddPublicationScreen(navController: NavHostController) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // Actions
+            // Actions - Design moderne avec 3 boutons
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 AddActionButton(
                     icon = Icons.Outlined.Image,
                     label = "Photo",
                     color = Color(0xFF3B82F6),
-                    onClick = { imagePickerLauncher.launch("image/*") }
+                    onClick = { imagePickerLauncher.launch("image/*") },
+                    modifier = Modifier.weight(1f)
                 )
 
                 AddActionButton(
                     icon = Icons.Outlined.Tag,
-                    label = "Tag",
+                    label = "Tags",
                     color = Color(0xFFF59E0B),
-                    onClick = { showTagDialog = true }
+                    onClick = { showTagDialog = true },
+                    modifier = Modifier.weight(1f)
                 )
 
                 AddActionButton(
                     icon = Icons.Outlined.AlternateEmail,
                     label = "Mention",
                     color = GreenAccent,
-                    onClick = { /* TODO: Désactivé pour l'instant */ }
-                )
-
-                AddActionButton(
-                    icon = Icons.Outlined.LocationOn,
-                    label = "Location",
-                    color = Color(0xFFEF4444),
-                    onClick = { /* TODO */ }
+                    onClick = { /* TODO: Désactivé pour l'instant */ },
+                    modifier = Modifier.weight(1f)
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(28.dp))
 
-            // Bouton Publish
-            Button(
-                onClick = {
-                    if (contentText.isNotBlank()) {
-                        viewModel.publishPublication()
-                    }
-                },
-                enabled = contentText.isNotBlank() && uiState !is AddPublicationUiState.Loading,
+            // Bouton Publish - Design moderne et élégant
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = GreenAccent,
-                    disabledContainerColor = GreenAccent.copy(alpha = 0.3f)
-                ),
-                shape = RoundedCornerShape(16.dp),
-                elevation = ButtonDefaults.buttonElevation(
-                    defaultElevation = 8.dp,
-                    pressedElevation = 12.dp,
-                    disabledElevation = 0.dp
-                )
-            ) {
-                if (uiState is AddPublicationUiState.Loading) {
-                    Row(
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = Color.White,
-                            strokeWidth = 3.dp
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "Publishing...",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
-                    }
-                } else {
-                    Row(
-                        horizontalArrangement = Arrangement.Center,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Send,
-                            contentDescription = null,
-                            tint = Color.White,
-                            modifier = Modifier.size(22.dp)
-                        )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            text = "Publish on Feed",
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color.White
-                        )
+                    .height(58.dp)
+                    .shadow(12.dp, RoundedCornerShape(20.dp)),
+                shape = RoundedCornerShape(20.dp),
+                color = Color.Transparent,
+                onClick = {
+                    Log.d("AddPublication", "🔵 PUBLISH BUTTON CLICKED!")
+                    Log.d("AddPublication", "Content: '$contentText'")
+                    Log.d("AddPublication", "Current state: $uiState")
+                    if (contentText.isNotBlank() && uiState !is AddPublicationUiState.Loading) {
+                        Log.d("AddPublication", "✅ Calling viewModel.publishPublication()")
+                        viewModel.publishPublication()
+                    } else {
+                        Log.d("AddPublication", "❌ Cannot publish: content blank or already loading")
                     }
                 }
-            }
-            // Success Dialog - Add this at the bottom of your composable, before the closing }
-            if (showSuccessDialog) {
-                AlertDialog(
-                    onDismissRequest = {
-                        showSuccessDialog = false
-                        navController.navigate("feed") {
-                            popUpTo("addpublication") { inclusive = true }
-                        }
-                    },
-                    icon = {
-                        Box(
-                            modifier = Modifier
-                                .size(80.dp)
-                                .background(
-                                    Brush.radialGradient(
-                                        colors = listOf(
-                                            SuccessGreen.copy(alpha = 0.3f),
-                                            Color.Transparent
-                                        )
-                                    ),
-                                    shape = CircleShape
-                                ),
-                            contentAlignment = Alignment.Center
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            if (contentText.isNotBlank() && uiState !is AddPublicationUiState.Loading) {
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        GreenAccent,
+                                        GreenAccent.copy(alpha = 0.85f)
+                                    )
+                                )
+                            } else {
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        GreenAccent.copy(alpha = 0.3f),
+                                        GreenAccent.copy(alpha = 0.25f)
+                                    )
+                                )
+                            },
+                            RoundedCornerShape(20.dp)
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (uiState is AddPublicationUiState.Loading) {
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = SuccessGreen,
-                                modifier = Modifier.size(48.dp)
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                color = Color.White,
+                                strokeWidth = 2.5.dp
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                text = "Publishing...",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White
                             )
                         }
-                    },
-                    title = {
-                        Text(
-                            text = "Published Successfully!",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 20.sp,
-                            color = TextPrimary,
-                            textAlign = TextAlign.Center
-                        )
-                    },
-                    text = {
-                        Text(
-                            text = "Your post has been shared with the community. Check it out in your feed!",
-                            color = TextSecondary,
-                            fontSize = 14.sp,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 20.sp
-                        )
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                showSuccessDialog = false
-                                navController.navigate("feed") {
-                                    popUpTo("addpublication") { inclusive = true }
-                                }
-                            },
-                            colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.fillMaxWidth()
+                    } else {
+                        Row(
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Row(
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text("View in Feed", fontWeight = FontWeight.Bold)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Icon(
-                                    imageVector = Icons.Default.ArrowForward,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
+                            Icon(
+                                imageVector = Icons.Default.Send,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Publish on Feed",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = Color.White,
+                                letterSpacing = 0.3.sp
+                            )
                         }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                showSuccessDialog = false
-                                navController.popBackStack()
-                            }
-                        ) {
-                            Text("Stay Here", color = TextTertiary)
-                        }
-                    },
-                    containerColor = CardDark,
-                    shape = RoundedCornerShape(24.dp)
-                )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -518,37 +567,60 @@ fun AddPublicationTopBar(
 ) {
     Surface(
         color = BackgroundDark,
-        shadowElevation = 4.dp
+        shadowElevation = 0.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBackClick) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = TextPrimary
+        Column {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .statusBarsPadding() // Évite le notch
+                    .padding(horizontal = 20.dp, vertical = 16.dp)
+            ) {
+                // Bouton X à gauche - BIEN VISIBLE
+                Surface(
+                    onClick = onBackClick,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart)
+                        .size(42.dp)
+                        .shadow(8.dp, CircleShape),
+                    shape = CircleShape,
+                    color = CardBackgroundLight
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .border(
+                                width = 2.dp,
+                                color = RedAccent.copy(alpha = 0.4f),
+                                shape = CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = RedAccent,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                }
+
+                // Titre centré - BIEN VISIBLE
+                Text(
+                    text = "New Post",
+                    color = TextPrimary,
+                    fontSize = 20.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.align(Alignment.Center)
                 )
             }
 
-            Text(
-                text = "New Post",
-                color = TextPrimary,
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Bold
+            // Divider élégant
+            HorizontalDivider(
+                color = DividerColor.copy(alpha = 0.3f),
+                thickness = 0.5.dp
             )
-
-            IconButton(onClick = onBackClick) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color.Transparent
-                )
-            }
         }
     }
 }
@@ -558,33 +630,55 @@ fun AddActionButton(
     icon: ImageVector,
     label: String,
     color: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Surface(
         onClick = onClick,
-        modifier = Modifier.size(75.dp),
-        shape = RoundedCornerShape(16.dp),
-        color = color.copy(alpha = 0.15f),
-        border = BorderStroke(1.dp, color.copy(alpha = 0.3f))
+        modifier = modifier
+            .height(80.dp)
+            .shadow(6.dp, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Transparent
     ) {
-        Column(
-            modifier = Modifier.fillMaxSize(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            color.copy(alpha = 0.20f),
+                            color.copy(alpha = 0.10f)
+                        )
+                    ),
+                    RoundedCornerShape(20.dp)
+                )
+                .border(
+                    width = 1.5.dp,
+                    color = color.copy(alpha = 0.35f),
+                    shape = RoundedCornerShape(20.dp)
+                )
         ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = color,
-                modifier = Modifier.size(28.dp)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = label,
-                color = color,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(vertical = 14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = label,
+                    tint = color,
+                    modifier = Modifier.size(28.dp)
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = label,
+                    color = color,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
         }
     }
 }
@@ -592,29 +686,47 @@ fun AddActionButton(
 @Composable
 fun TagChip(tag: String, onRemove: () -> Unit) {
     Surface(
-        shape = RoundedCornerShape(20.dp),
-        color = GreenAccent.copy(alpha = 0.2f),
-        border = BorderStroke(1.dp, GreenAccent.copy(alpha = 0.5f))
+        shape = RoundedCornerShape(24.dp),
+        color = Color.Transparent,
+        modifier = Modifier.shadow(4.dp, RoundedCornerShape(24.dp))
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            GreenAccent.copy(alpha = 0.25f),
+                            GreenAccent.copy(alpha = 0.15f)
+                        )
+                    ),
+                    RoundedCornerShape(24.dp)
+                )
+                .border(
+                    width = 1.5.dp,
+                    color = GreenAccent.copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(24.dp)
+                )
         ) {
-            Text(
-                text = "#$tag",
-                color = GreenAccent,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium
-            )
-            Spacer(modifier = Modifier.width(6.dp))
-            Icon(
-                imageVector = Icons.Default.Close,
-                contentDescription = "Remove",
-                tint = GreenAccent,
-                modifier = Modifier
-                    .size(16.dp)
-                    .clickable { onRemove() }
-            )
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "#$tag",
+                    color = GreenAccent,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove",
+                    tint = GreenAccent,
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clickable { onRemove() }
+                )
+            }
         }
     }
 }
@@ -622,36 +734,70 @@ fun TagChip(tag: String, onRemove: () -> Unit) {
 @Composable
 fun TipsCard() {
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = CardBackground.copy(alpha = 0.4f),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(4.dp, RoundedCornerShape(20.dp)),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Transparent
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp),
-            verticalAlignment = Alignment.Top
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            CardBackground.copy(alpha = 0.5f),
+                            CardBackground.copy(alpha = 0.3f)
+                        )
+                    ),
+                    RoundedCornerShape(20.dp)
+                )
+                .border(
+                    width = 1.5.dp,
+                    color = Color(0xFFFBBF24).copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(20.dp)
+                )
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Lightbulb,
-                contentDescription = null,
-                tint = Color(0xFFFBBF24),
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column {
-                Text(
-                    text = "Pro Tips",
-                    color = TextPrimary,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "• Use hashtags to reach more cyclists\n• Add photos to make your post engaging",
-                    color = TextSecondary,
-                    fontSize = 12.sp,
-                    lineHeight = 18.sp
-                )
+            Row(
+                modifier = Modifier.padding(18.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    Color(0xFFFBBF24).copy(alpha = 0.25f),
+                                    Color.Transparent
+                                )
+                            ),
+                            CircleShape
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Lightbulb,
+                        contentDescription = null,
+                        tint = Color(0xFFFBBF24),
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.width(14.dp))
+                Column {
+                    Text(
+                        text = "Pro Tips",
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "• Use hashtags to reach more cyclists\n• Add photos to make your post engaging",
+                        color = TextSecondary,
+                        fontSize = 13.sp,
+                        lineHeight = 20.sp
+                    )
+                }
             }
         }
     }

@@ -40,6 +40,12 @@ class ChatViewModel : ViewModel() {
     private val _typingUsers = MutableStateFlow<Set<String>>(emptySet())
     val typingUsers: StateFlow<Set<String>> = _typingUsers.asStateFlow()
 
+    private val _polls = MutableStateFlow<List<Poll>>(emptyList())
+    val polls: StateFlow<List<Poll>> = _polls.asStateFlow()
+
+    private val _isLoadingPolls = MutableStateFlow(false)
+    val isLoadingPolls: StateFlow<Boolean> = _isLoadingPolls.asStateFlow()
+
     private var currentSortieId: String? = null
     private var currentUserId: String? = null
     private var sendTimeoutJob: Job? = null
@@ -168,6 +174,55 @@ class ChatViewModel : ViewModel() {
             _isSending.value = false
             sendTimeoutJob?.cancel()
         }
+
+        // ========== POLL LISTENERS ==========
+        SocketService.onPollCreated = { pollId ->
+            Log.d(TAG, "📊 New poll created via WebSocket: $pollId")
+            // Recharger tous les sondages
+            currentSortieId?.let { sortieId ->
+                viewModelScope.launch {
+                    val context = getApplicationContext()
+                    if (context != null) {
+                        loadPolls(sortieId, context)
+                    }
+                }
+            }
+        }
+
+        SocketService.onPollUpdated = { pollId ->
+            Log.d(TAG, "📊 Poll updated via WebSocket: $pollId")
+            // Recharger tous les sondages
+            currentSortieId?.let { sortieId ->
+                viewModelScope.launch {
+                    val context = getApplicationContext()
+                    if (context != null) {
+                        loadPolls(sortieId, context)
+                    }
+                }
+            }
+        }
+
+        SocketService.onPollClosed = { pollId ->
+            Log.d(TAG, "📊 Poll closed via WebSocket: $pollId")
+            // Recharger tous les sondages
+            currentSortieId?.let { sortieId ->
+                viewModelScope.launch {
+                    val context = getApplicationContext()
+                    if (context != null) {
+                        loadPolls(sortieId, context)
+                    }
+                }
+            }
+        }
+    }
+
+    // Helper pour obtenir le contexte (à ajouter si nécessaire)
+    private var applicationContext: Context? = null
+
+    private fun getApplicationContext(): Context? = applicationContext
+
+    fun setApplicationContext(context: Context) {
+        applicationContext = context.applicationContext
     }
 
     fun connectAndJoinRoom(sortieId: String, context: Context) {
@@ -587,6 +642,149 @@ class ChatViewModel : ViewModel() {
     private fun getUserId(context: Context): String? {
         val sharedPref = context.getSharedPreferences("cycle_app_prefs", Context.MODE_PRIVATE)
         return sharedPref.getString("user_id", null)
+    }
+
+    // ========== POLL FUNCTIONS ==========
+
+    /**
+     * Créer un sondage pour une sortie
+     */
+    fun createPoll(
+        sortieId: String,
+        question: String,
+        options: List<String>,
+        allowMultiple: Boolean,
+        context: Context
+    ) {
+        viewModelScope.launch {
+            _isSending.value = true
+            _errorMessage.value = null
+
+            try {
+                val token = getToken(context)
+                if (token.isNullOrEmpty()) {
+                    _errorMessage.value = "Token non trouvé"
+                    _isSending.value = false
+                    return@launch
+                }
+
+                Log.d(TAG, "📊 Creating poll: $question with ${options.size} options")
+
+                val createPollDto = CreatePollDto(
+                    question = question,
+                    options = options,
+                    allowMultiple = allowMultiple
+                )
+
+                val response = com.example.dam.remote.RetrofitInstance.pollApi
+                    .createPollForSortie("Bearer $token", sortieId, createPollDto)
+
+                if (response.isSuccessful) {
+                    val poll = response.body()
+                    Log.d(TAG, "✅ Poll created: ${poll?.id}")
+                    _successMessage.value = "Sondage créé avec succès"
+
+                    // Recharger les sondages
+                    loadPolls(sortieId, context)
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    Log.e(TAG, "❌ Error creating poll: $errorBody")
+                    _errorMessage.value = "Erreur lors de la création du sondage"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "💥 Exception creating poll: ${e.message}", e)
+                _errorMessage.value = "Erreur: ${e.message}"
+            } finally {
+                _isSending.value = false
+            }
+        }
+    }
+
+    /**
+     * Charger les sondages d'une sortie
+     */
+    fun loadPolls(sortieId: String, context: Context) {
+        viewModelScope.launch {
+            _isLoadingPolls.value = true
+
+            try {
+                val token = getToken(context)
+                if (token.isNullOrEmpty()) {
+                    _errorMessage.value = "Token non trouvé"
+                    _isLoadingPolls.value = false
+                    return@launch
+                }
+
+                Log.d(TAG, "📊 Loading polls for sortie: $sortieId")
+
+                val response = com.example.dam.remote.RetrofitInstance.pollApi
+                    .getSortiePolls("Bearer $token", sortieId, page = 1, limit = 50)
+
+                if (response.isSuccessful) {
+                    val pollResponse = response.body()
+                    _polls.value = pollResponse?.polls ?: emptyList()
+                    Log.d(TAG, "========================================")
+                    Log.d(TAG, "✅ Loaded ${_polls.value.size} polls")
+                    _polls.value.forEach { poll ->
+                        Log.d(TAG, "   📊 Poll: ${poll.question} (${poll.options.size} options, ${poll.totalVotes} votes)")
+                    }
+                    Log.d(TAG, "========================================")
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    Log.e(TAG, "❌ Error loading polls: $errorBody")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "💥 Exception loading polls: ${e.message}", e)
+            } finally {
+                _isLoadingPolls.value = false
+            }
+        }
+    }
+
+    /**
+     * Voter sur un sondage
+     */
+    fun voteOnPoll(
+        pollId: String,
+        optionIds: List<String>,
+        context: Context
+    ) {
+        viewModelScope.launch {
+            try {
+                val token = getToken(context)
+                if (token.isNullOrEmpty()) {
+                    _errorMessage.value = "Token non trouvé"
+                    return@launch
+                }
+
+                Log.d(TAG, "📊 Voting on poll: $pollId with options: $optionIds")
+
+                val voteDto = VoteDto(optionIds = optionIds)
+
+                val response = com.example.dam.remote.RetrofitInstance.pollApi
+                    .voteOnPoll("Bearer $token", pollId, voteDto)
+
+                if (response.isSuccessful) {
+                    val updatedPoll = response.body()
+                    Log.d(TAG, "✅ Vote recorded")
+                    _successMessage.value = "Vote enregistré"
+
+                    // Mettre à jour le sondage dans la liste
+                    if (updatedPoll != null) {
+                        _polls.value = _polls.value.map { poll ->
+                            if (poll.id == updatedPoll.id) updatedPoll else poll
+                        }
+                    }
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    Log.e(TAG, "❌ Error voting: $errorBody")
+                    _errorMessage.value = "Erreur lors du vote"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "💥 Exception voting: ${e.message}", e)
+                _errorMessage.value = "Erreur: ${e.message}"
+            }
+        }
     }
 
     override fun onCleared() {

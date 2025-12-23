@@ -1,12 +1,20 @@
 // remote/AdventureApi.kt
 package com.example.dam.remote
 
+import com.example.dam.models.CreateRatingRequest
+import com.example.dam.models.CreateRatingResponse
+import com.example.dam.models.CreatorRatingResponse
+import com.example.dam.models.EligibleSortieForRating
 import com.example.dam.models.ParticipationRequest
 import com.example.dam.models.ParticipationResponse
+import com.example.dam.models.RatingItem
+import com.example.dam.models.RecomputeRatingResponse
 import com.example.dam.models.RecommendationsResponse
 import com.example.dam.models.SimpleParticipationResponse
+import com.example.dam.models.SortieRatingsResponse
 import com.example.dam.models.SortieResponse
 import com.example.dam.models.UpdateParticipationStatusRequest
+import com.example.dam.models.UserParticipationResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
 import retrofit2.Response
@@ -37,15 +45,11 @@ interface AdventureApi {
         @Part("niveau") niveau: RequestBody,
         @Part("capacite") capacite: RequestBody,
         @Part("prix") prix: RequestBody,
-//        @Part("campingId") campingId: RequestBody?,
         @Part("itineraire") itineraire: RequestBody,
         @Part("camping") camping: RequestBody?
     ): Response<Any>
 
-
-
-
-    // ============== NEW GET ENDPOINTS ==============
+    // ============== GET ENDPOINTS ==============
 
     @GET("sorties")
     suspend fun getAllSorties(): Response<List<SortieResponse>>
@@ -55,33 +59,19 @@ interface AdventureApi {
         @Path("id") id: String
     ): Response<SortieResponse>
 
-
-
-
     // ============== PARTICIPATION ENDPOINTS ==============
-    /**
-     * ✅ FIXED: Create participation - returns SimpleParticipationResponse
-     * POST /participations
-     */
+
     @POST("participations")
     suspend fun createParticipation(
         @Header("Authorization") token: String,
         @Body request: ParticipationRequest
     ): Response<SimpleParticipationResponse>
 
-    /**
-     * Get participations for a sortie - returns ParticipationResponse with populated data
-     * GET /participations?sortieId={sortieId}
-     */
     @GET("participations")
     suspend fun getParticipations(
         @Query("sortieId") sortieId: String
     ): Response<List<ParticipationResponse>>
 
-    /**
-     * ✅ FIXED: Update participation status - returns SimpleParticipationResponse
-     * PATCH /participations/{id}/status
-     */
     @PATCH("participations/{id}/status")
     suspend fun updateParticipationStatus(
         @Path("id") id: String,
@@ -89,24 +79,74 @@ interface AdventureApi {
         @Body request: UpdateParticipationStatusRequest
     ): Response<SimpleParticipationResponse>
 
-    /**
-     * Cancel participation
-     * DELETE /participations/{id}
-     */
     @DELETE("participations/{id}")
     suspend fun cancelParticipation(
         @Path("id") id: String,
         @Header("Authorization") token: String
     ): Response<Unit>
 
+    @GET("participations/user/{userId}")
+    suspend fun getUserParticipations(
+        @Path("userId") userId: String
+    ): Response<List<UserParticipationResponse>>
 
+    // ============== RATING ENDPOINTS ==============
 
+    /**
+     * ✅ FIXED: Get creator rating summary
+     * GET /ratings/creator/{userId}
+     * Returns: {"average": 3.1, "count": 9}
+     */
+    @GET("ratings/creator/{userId}")
+    suspend fun getCreatorRating(
+        @Path("userId") userId: String,
+        @Header("Authorization") token: String
+    ): Response<CreatorRatingResponse>
+
+    /**
+     * ✅ FIXED: Recompute creator rating
+     * POST /ratings/recompute/creator/{userId}
+     * Returns: {"message": "Creator summary recomputed successfully"}
+     */
+    @POST("ratings/recompute/creator/{userId}")
+    suspend fun recomputeCreatorRating(
+        @Path("userId") userId: String,
+        @Header("Authorization") token: String
+    ): Response<RecomputeRatingResponse>
 
     @GET("recommendations/user/{userId}")
     suspend fun getRecommendationsForUser(
         @Path("userId") userId: String,
         @Header("Authorization") token: String
     ): Response<RecommendationsResponse>
+
+    @GET("ratings/sortie/{sortieId}")
+    suspend fun getSortieRatings(
+        @Path("sortieId") sortieId: String,
+        @Header("Authorization") token: String,
+        @Query("page") page: Int = 1,
+        @Query("limit") limit: Int = 100
+    ): Response<SortieRatingsResponse>
+
+    @POST("ratings/sortie/{sortieId}")
+    suspend fun createRating(
+        @Path("sortieId") sortieId: String,
+        @Header("Authorization") token: String,
+        @Body request: CreateRatingRequest
+    ): Response<CreateRatingResponse>
+
+    @GET("ratings/sortie/{sortieId}/user")
+    suspend fun getUserRatingForSortie(
+        @Path("sortieId") sortieId: String,
+        @Header("Authorization") token: String
+    ): Response<RatingItem>
+
+    @GET("ratings/eligible")
+    suspend fun getEligibleSortiesForRating(
+        @Header("Authorization") token: String
+    ): Response<List<EligibleSortieForRating>>
+
+    // ============== SAVED SORTIES ==============
+    // Note: Les sorties sauvegardées sont gérées LOCALEMENT via LocalSavedSortiesManager
+    // Aucun endpoint backend n'est nécessaire pour cette fonctionnalité
 }
-
-

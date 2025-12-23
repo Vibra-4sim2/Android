@@ -16,20 +16,20 @@ object RetrofitInstance {
     // Pour appareil physique : l'IP de votre PC (ex: 192.168.1.5)
     // Pour trouver votre IP : cmd → ipconfig (Windows) ou ifconfig (Mac/Linux)
 //    private const val BASE_URL = "http://10.0.2.2:3000/"
-        private const val BASE_URL = "https://dam-4sim2.onrender.com/"
+    private const val BASE_URL = "https://dam-4sim2.onrender.com/"
+    private const val FLASK_URL = "https://dam-4sim2.onrender.com/"
 
-
-//    private const val BASE_URL = "http://192.168.121.98:3000/"
-
-
-    // Pour appareil physique, décommentez et modifiez :
-    // private const val BASE_URL = "http://192.168.1.X:3000/"
 
     /**
      * Intercepteur pour logger les requêtes HTTP (utile pour debug)
      */
     private val loggingInterceptor = HttpLoggingInterceptor().apply {
         level = HttpLoggingInterceptor.Level.BODY // Log complet (requête + réponse)
+    }
+
+
+    val pollApi: PollApiService by lazy {
+        retrofit.create(PollApiService::class.java)
     }
 
     /**
@@ -60,6 +60,11 @@ object RetrofitInstance {
         retrofit.create(AuthApiService::class.java)
     }
 
+
+    val participationapi: AdventureApi by lazy {
+        retrofit.create(AdventureApi::class.java)
+    }
+
     val adventureApi: AdventureApi by lazy { retrofit.create(AdventureApi::class.java) }
 
     /**
@@ -80,21 +85,11 @@ object RetrofitInstance {
     val messageApi: MessageApiService by lazy {
         retrofit.create(MessageApiService::class.java)
     }
+
+    /**
+     * ✅ API des notifications (polling system)
+     */
+    val notificationApi: NotificationApiService by lazy {
+        retrofit.create(NotificationApiService::class.java)
+    }
 }
-
-
-/*
-COMMENT CRÉER CE FICHIER :
-1. Clic droit sur java/com/example/dam/data/remote
-2. New → Kotlin Class/File
-3. Choisissez "Object"
-4. Nommez : RetrofitInstance
-5. Collez ce code
-
-IMPORTANT - TROUVER VOTRE IP :
-- Ouvrez CMD (Windows) ou Terminal (Mac)
-- Tapez : ipconfig (Windows) ou ifconfig (Mac)
-- Cherchez "IPv4 Address" ou "inet"
-- Exemple : 192.168.1.5
-- Remplacez dans BASE_URL si vous testez sur appareil physique
-*/

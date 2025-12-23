@@ -6,6 +6,7 @@ import com.example.dam.remote.AuthApiService
 import com.example.dam.remote.RetrofitInstance
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import com.example.dam.utils.Result
 
 // Sealed class to represent success, failure, and loading states
 sealed class MyResult<out T> {
@@ -13,6 +14,7 @@ sealed class MyResult<out T> {
     data class Failure(val error: Exception) : MyResult<Nothing>()
     object Loading : MyResult<Nothing>()
 }
+
 
 class UserProfileRepository {
 
@@ -54,18 +56,18 @@ class UserProfileRepository {
         }
     }
 
-    suspend fun getUserPublications(userId: String): MyResult<List<PublicationResponse>> = withContext(Dispatchers.IO) {
+    suspend fun getUserPublications(userId: String): Result<List<PublicationResponse>> = withContext(Dispatchers.IO) {
         try {
             val response = publicationApi.getPublicationsByAuthor(userId)
             if (response.isSuccessful && response.body() != null) {
-                MyResult.Success(response.body()!!)
+                Result.Success(response.body()!!)
             } else {
                 Log.e("UserProfileRepo", "Failed to get publications: ${response.code()}")
-                MyResult.Failure(Exception("Failed to get publications: ${response.code()}"))
+                Result.Failure(Exception("Failed to get publications: ${response.code()}"))
             }
         } catch (e: Exception) {
             Log.e("UserProfileRepo", "Error getting publications: ${e.message}", e)
-            MyResult.Failure(e)
+            Result.Failure(e)
         }
     }
 
@@ -138,6 +140,22 @@ class UserProfileRepository {
         } catch (e: Exception) {
             Log.e("UserProfileRepo", "Error loading following", e)
             MyResult.Failure(e)
+        }
+    }
+
+
+    suspend fun getCreatorRating(userId: String, token: String): MyResult<CreatorRatingResponse> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val response = adventureApi.getCreatorRating(userId, "Bearer $token")
+                if (response.isSuccessful && response.body() != null) {
+                    MyResult.Success(response.body()!!)
+                } else {
+                    MyResult.Failure(Exception("Failed to fetch rating: ${response.code()}"))
+                }
+            } catch (e: Exception) {
+                MyResult.Failure(e)
+            }
         }
     }
 

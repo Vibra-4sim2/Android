@@ -514,6 +514,50 @@ class AuthRepository {
 
         return file
     }
+
+
+    /**
+     * ✅ Vérifie si l'utilisateur a complété l'onboarding
+     * en appelant GET /preferences/{userId}
+     */
+    suspend fun checkOnboardingStatus(userId: String, token: String): Result<Boolean> {
+        return try {
+            Log.d(TAG, "========== CHECK ONBOARDING STATUS ==========")
+            Log.d(TAG, "🔍 Fetching preferences for userId: $userId")
+
+            val response = RetrofitInstance.authApi.getPreferences(userId, "Bearer $token")
+
+            if (response.isSuccessful && response.body() != null) {
+                val preferences = response.body()!!
+                val hasCompleted = preferences.onboardingComplete == true
+
+                Log.d(TAG, "✅ Preferences fetched successfully")
+                Log.d(TAG, "📊 Onboarding complete: $hasCompleted")
+                Log.d(TAG, "📊 Level: ${preferences.level}")
+                Log.d(TAG, "📊 Cycling type: ${preferences.cyclingType}")
+                Log.d(TAG, "=============================================")
+
+                Result.Success(hasCompleted)
+            } else if (response.code() == 404) {
+                // Pas de préférences trouvées = onboarding non complété
+                Log.d(TAG, "⚠️ No preferences found (404) - Onboarding not complete")
+                Result.Success(false)
+            } else {
+                val errorMessage = "Failed to fetch preferences: ${response.code()}"
+                Log.e(TAG, "❌ $errorMessage")
+                // En cas d'erreur, considérer que l'onboarding n'est pas complété
+                Result.Success(false)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Exception checking onboarding: ${e.message}", e)
+            // En cas d'erreur réseau, considérer que l'onboarding n'est pas complété
+            Result.Success(false)
+        }
+    }
+
+
+
+
 }
 
 

@@ -20,12 +20,11 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import androidx.navigation.compose.rememberNavController
-import com.example.dam.NavigationRoutes
+import com.example.dam.repository.AuthRepository
+import com.example.dam.repository.Result
 import com.example.dam.ui.theme.*
 import com.example.dam.utils.UserPreferences
 import kotlinx.coroutines.delay
@@ -33,11 +32,10 @@ import kotlin.random.Random
 
 @Composable
 fun SplashScreen(navController: NavController) {
-    // Use theme colors
     val greenColor = GreenAccent
     val backgroundColor = BackgroundDark
     val context = LocalContext.current
-
+    val authRepository = remember { AuthRepository() }
 
     // Animations
     val infiniteTransition = rememberInfiniteTransition(label = "splash")
@@ -84,41 +82,69 @@ fun SplashScreen(navController: NavController) {
 
         val isFirstLaunch = UserPreferences.isFirstLaunch(context)
         val token = UserPreferences.getToken(context)
-        val isOnboardingComplete = UserPreferences.isOnboardingComplete(context)
+        val userId = UserPreferences.getUserId(context)
 
         Log.d("SplashScreen", "========== SPLASH NAVIGATION ==========")
-        Log.d("SplashScreen", "isFirstLaunch: $isFirstLaunch")
-        Log.d("SplashScreen", "token: ${token?.take(20)}")
-        Log.d("SplashScreen", "isOnboardingComplete: $isOnboardingComplete")
+        Log.d("SplashScreen", "🆕 isFirstLaunch: $isFirstLaunch")
+        Log.d("SplashScreen", "🔑 token: ${token?.take(20)}")
+        Log.d("SplashScreen", "👤 userId: $userId")
 
         val destination = when {
-            // Case 1: Very first app launch → Onboarding
+            // ✅ Cas 1: Tout premier lancement de l'app → Onboarding
             isFirstLaunch -> {
                 Log.d("SplashScreen", "🆕 First launch → Onboarding")
                 "onboarding1"
             }
 
-            // Case 2: Has token AND completed onboarding before → Home
-            token != null && isOnboardingComplete -> {
-                Log.d("SplashScreen", "✅ Returning user → Home")
-                "home"
+            // ✅ Cas 2: A un token ET un userId → Vérifier si préférences remplies
+            token != null && userId != null -> {
+                Log.d("SplashScreen", "🔍 User logged in, checking preferences status...")
+
+                // ✅ APPEL DU REPOSITORY
+                when (val result = authRepository.checkOnboardingStatus(userId, token)) {
+                    is Result.Success -> {
+                        if (result.data) {
+                            Log.d("SplashScreen", "✅ User has completed preferences → Home")
+                            // Mettre à jour le flag local aussi
+                            UserPreferences.setOnboardingComplete(context, true)
+                            "home"
+                        } else {
+                            Log.d("SplashScreen", "⚠️ User needs to complete preferences → Preferences")
+                            UserPreferences.setOnboardingComplete(context, false)
+                            "preferences"
+                        }
+                    }
+                    is Result.Error -> {
+                        Log.e("SplashScreen", "❌ Error checking preferences: ${result.message}")
+                        // En cas d'erreur réseau, utiliser le flag local comme fallback
+                        val localOnboardingComplete = UserPreferences.isOnboardingComplete(context)
+                        if (localOnboardingComplete) {
+                            Log.d("SplashScreen", "⚠️ Using local cache → Home")
+                            "home"
+                        } else {
+                            Log.d("SplashScreen", "⚠️ Using local cache → Preferences")
+                            "preferences"
+                        }
+                    }
+                    is Result.Loading -> "preferences" // Shouldn't happen but safe fallback
+                }
             }
 
-            // Case 3: Has token BUT never completed preferences → Preferences
-            // (This is a NEW Google user who just signed in for first time)
-            token != null && !isOnboardingComplete -> {
-                Log.d("SplashScreen", "🆕 New Google user → Preferences")
-                "preferences"
+            // ✅ Cas 3: A un token mais pas de userId (ne devrait pas arriver)
+            token != null -> {
+                Log.d("SplashScreen", "⚠️ Token exists but no userId → Clear and go to Login")
+                UserPreferences.clear(context)
+                "login"
             }
 
-            // Case 4: No token → Login
+            // ✅ Cas 4: Pas de token → Login
             else -> {
                 Log.d("SplashScreen", "🔐 No token → Login")
                 "login"
             }
         }
 
-        Log.d("SplashScreen", "→ Destination: $destination")
+        Log.d("SplashScreen", "→ Navigating to: $destination")
         Log.d("SplashScreen", "=====================================")
 
         navController.navigate(destination) {
@@ -126,28 +152,22 @@ fun SplashScreen(navController: NavController) {
         }
     }
 
-
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .background(backgroundColor),
         contentAlignment = Alignment.Center
     ) {
-        // Animated particles
         AnimatedParticles(color = greenColor)
 
-        // Background circles
         Canvas(modifier = Modifier.fillMaxSize()) {
             val center = Offset(size.width / 2, size.height / 2)
-
             drawCircle(
                 color = greenColor.copy(alpha = 0.1f),
                 radius = 250f,
                 center = center,
                 style = Stroke(width = 1f)
             )
-
             drawCircle(
                 color = greenColor.copy(alpha = 0.15f),
                 radius = 200f,
@@ -169,7 +189,6 @@ fun SplashScreen(navController: NavController) {
                 contentAlignment = Alignment.Center,
                 modifier = Modifier.offset(y = (-20).dp)
             ) {
-                // Background shadow text with glow animation
                 Text(
                     text = buildAnnotatedString {
                         append("V")
@@ -185,7 +204,6 @@ fun SplashScreen(navController: NavController) {
                     )
                 )
 
-                // Foreground text with scale animation
                 Text(
                     text = buildAnnotatedString {
                         append("V")
@@ -204,7 +222,6 @@ fun SplashScreen(navController: NavController) {
 
             Spacer(modifier = Modifier.height(30.dp))
 
-            // Animated horizontal line
             Canvas(modifier = Modifier.width(lineWidth.dp).height(2.dp)) {
                 drawLine(
                     brush = Brush.horizontalGradient(
@@ -270,7 +287,6 @@ fun AnimatedParticles(color: Color) {
     Canvas(modifier = Modifier.fillMaxSize()) {
         particles.forEach { p ->
             val y = ((p.initialY - (progress + p.delay)) % 1f + 1f) % 1f
-
             drawCircle(
                 color = color.copy(alpha = 0.20f),
                 radius = 4f,
@@ -285,11 +301,3 @@ data class ParticleData(
     val initialY: Float,
     val delay: Float
 )
-
-@Preview(showBackground = true, showSystemUi = true)
-@Composable
-fun SplashPreview() {
-    DamTheme {
-        SplashScreen(navController = rememberNavController())
-    }
-}

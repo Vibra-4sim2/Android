@@ -17,7 +17,7 @@ data class RecommendationsResponse(
 /**
  * Wrapper pour les Smart Matches avec score
  */
-data class SmartMatch(
-    val sortie: SortieResponse,
-    val matchScore: Int
-)
+//data class SmartMatch(
+//    val sortie: SortieResponse,
+//    val matchScore: Int
+//)

@@ -34,9 +34,12 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.example.dam.Screens.*
+import com.example.dam.models.EligibleSortieForRating
 import com.example.dam.utils.UserPreferences
 import com.example.dam.viewmodel.ChatViewModel
 import com.example.dam.viewmodel.LoginViewModel
+import com.example.dam.viewmodel.RatingViewModel
+import com.example.dam.viewmodel.NotificationViewModel
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -50,22 +53,109 @@ fun TabBarView(
     val chatViewModel: ChatViewModel = viewModel()
     val loginViewModel: LoginViewModel = viewModel()
 
+    // ✅ NEW: Rating ViewModel for eligible sorties popup
+    val ratingViewModel: RatingViewModel = viewModel()
+
+    // ✅ NEW: Notification ViewModel for notification badge
+    val notificationViewModel: NotificationViewModel = viewModel()
+    val unreadNotifCount by notificationViewModel.unreadCount.collectAsState()
+    val eligibleSorties: List<EligibleSortieForRating> by ratingViewModel.eligibleSorties.collectAsState()
+    val ratingIsLoading: Boolean by ratingViewModel.isLoading.collectAsState()
+    val ratingError: String? by ratingViewModel.errorMessage.collectAsState()
+    val ratingSuccess: String? by ratingViewModel.successMessage.collectAsState()
+
+    // ✅ NEW: State for rating dialog
+    var showEligibleRatingPopup by remember { mutableStateOf(false) }
+    var showIndividualRatingDialog by remember { mutableStateOf(false) }
+    var selectedSortieForRating by remember { mutableStateOf<String?>(null) }
+    var isHomeScreenReady by remember { mutableStateOf(false) }
+
     val internalNavController = rememberNavController()
     val navBackStackEntry by internalNavController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
     val tabs = listOf("Home", "Discussions", "Add", "Community", "Profile")
-    var selectedTab by remember { mutableStateOf(0) }
 
-    // Update selected tab based on current route
+    // ✅ CORRECTION CRITIQUE : Utiliser derivedStateOf pour synchroniser selectedTab avec currentRoute
+    // sans causer de conflits lors des recompositions
+    val selectedTab by remember {
+        derivedStateOf {
+            when (currentRoute) {
+                "home" -> 0
+                "messages" -> 1
+                "add" -> 2
+                "feed" -> 3
+                "profile" -> 4
+                else -> 0
+            }
+        }
+    }
+
+    // ✅ NEW: Load eligible sorties when app starts
+    LaunchedEffect(Unit) {
+        val token = UserPreferences.getToken(context)
+        if (!token.isNullOrEmpty()) {
+            Log.d("TabBarView", "🔍 Loading eligible sorties for rating...")
+            ratingViewModel.loadEligibleSorties(token)
+
+            // ✅ Load notification count
+            notificationViewModel.loadUnreadCount(context)
+        }
+    }
+
+    // ✅ Refresh notification count periodically (every time route changes)
     LaunchedEffect(currentRoute) {
-        selectedTab = when (currentRoute) {
-            "home" -> 0
-            "messages" -> 1
-            "add" -> 2
-            "feed" -> 3
-            "profile" -> 4
-            else -> selectedTab
+        notificationViewModel.loadUnreadCount(context)
+    }
+
+    // ✅ NEW: Wait for home screen to be ready before showing popup
+    LaunchedEffect(currentRoute) {
+        if (currentRoute == "home") {
+            // Delay to ensure HomeExploreScreen is fully rendered
+            kotlinx.coroutines.delay(1500) // Wait 1.5 seconds
+            isHomeScreenReady = true
+            Log.d("TabBarView", "✅ Home screen ready, can show popup now")
+        }
+    }
+
+    // ✅ NEW: Show popup when eligible sorties are loaded AND home screen is ready
+    LaunchedEffect(eligibleSorties, isHomeScreenReady) {
+        if (eligibleSorties.isNotEmpty() && !showEligibleRatingPopup && isHomeScreenReady) {
+            Log.d("TabBarView", "✅ Found ${eligibleSorties.size} eligible sorties - showing popup")
+            showEligibleRatingPopup = true
+        }
+    }
+
+    // ✅ NEW: Handle rating success
+    LaunchedEffect(ratingSuccess) {
+        ratingSuccess?.let {
+            Log.d("TabBarView", "✅ Rating submitted successfully")
+            // Close individual rating dialog
+            showIndividualRatingDialog = false
+            selectedSortieForRating = null
+
+            // Remove rated sortie from eligible list
+            selectedSortieForRating?.let { sortieId ->
+                ratingViewModel.removeEligibleSortie(sortieId)
+            }
+
+            // Clear messages
+            ratingViewModel.clearMessages()
+
+            // If no more eligible sorties, close the popup
+            if (eligibleSorties.isEmpty()) {
+                showEligibleRatingPopup = false
+            }
+        }
+    }
+
+    // ✅ NEW: Handle rating error
+    LaunchedEffect(ratingError) {
+        ratingError?.let { error ->
+            Log.e("TabBarView", "❌ Rating error: $error")
+            // Auto-dismiss error after 3 seconds
+            kotlinx.coroutines.delay(3000)
+            ratingViewModel.clearMessages()
         }
     }
 
@@ -78,13 +168,16 @@ fun TabBarView(
         label = "rotation"
     )
 
-    // ✅ MODIFIÉ: Liste des routes où les barres doivent être cachées
-    // Les écrans de recommandations MONTRENT les barres (comme home)
+    // ✅ Liste des routes où les barres doivent être cachées
     val hiddenBarRoutes = listOf(
         "edit_profile",
         "addpublication",
         "sortieDetail/{sortieId}",
-        "chatConversation/{sortieId}/{groupName}/{groupEmoji}/{participantsCount}"
+        "chatConversation/{sortieId}/{groupName}/{groupEmoji}/{participantsCount}",
+        "userProfile/{userId}",
+        "participation_requests/{sortieId}",
+        "notifications",  // ✅ Cacher les barres aussi pour les notifications
+        "saved"  // ✅ Cacher les barres pour l'écran saved
     )
 
     val shouldShowBars = currentRoute !in hiddenBarRoutes
@@ -144,6 +237,10 @@ fun TabBarView(
                     composable("addpublication") {
                         AddPublicationScreen(navController = internalNavController)
                     }
+                    // ✅ Route pour l'écran des notifications
+                    composable("notifications") {
+                        NotificationsScreen(navController = internalNavController)
+                    }
                     composable(
                         route = "sortieDetail/{sortieId}",
                         arguments = listOf(
@@ -181,24 +278,7 @@ fun TabBarView(
                         )
                     }
 
-                    // ✅ NOUVELLES ROUTES - RECOMMANDATIONS
-                    composable("recommendation_hub") {
-                        RecommendationHubScreen(navController = internalNavController)
-                    }
-
-                    composable("preference_recommendations") {
-                        PreferenceRecommendationsScreen(navController = internalNavController)
-                    }
-
-                    composable("weather_recommendations") {
-                        WeatherRecommendationsScreen(navController = internalNavController)
-                    }
-
-                    composable("smart_matches") {
-                        SmartMatchesScreen(navController = internalNavController)
-                    }
-
-                    // ✅ ADD THIS MISSING ROUTE
+                    // ✅ Participation Requests Route
                     composable(
                         route = "participation_requests/{sortieId}",
                         arguments = listOf(
@@ -210,6 +290,45 @@ fun TabBarView(
                             navController = internalNavController,
                             sortieId = sortieId
                         )
+                    }
+
+                    // ✅ User Profile Route
+                    composable(
+                        route = "userProfile/{userId}",
+                        arguments = listOf(
+                            navArgument("userId") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val userId = backStackEntry.arguments?.getString("userId") ?: ""
+                        UserProfileScreen(
+                            navController = internalNavController,
+                            userId = userId
+                        )
+                    }
+
+                    // ✅ Recommendation Routes
+                    composable("recommendation_hub") {
+                        RecommendationHubScreen(navController = internalNavController)
+                    }
+
+
+                    // ✅ NEW: Flask AI Recommendations
+                    composable("flask_recommendations") {
+                        FlaskAiRecommendationsScreen(navController = internalNavController)
+                    }
+
+                    // ✅ NEW: Flask Matchmaking
+                    composable("flask_matchmaking") {
+                        FlaskMatchmakingScreen(navController = internalNavController)
+                    }
+
+                    composable("flask_itinerary") {
+                        FlaskItineraryScreen(navController = navController)
+                    }
+
+                    // ✅ Saved Sorties Route
+                    composable("saved") {
+                        SavedSortiesScreen(navController = internalNavController)
                     }
                 }
             }
@@ -259,13 +378,62 @@ fun TabBarView(
                             )
                         }
 
-                        Surface(
-                            onClick = { showOptions = !showOptions },
-                            shape = CircleShape,
-                            color = BackgroundDark,
-                            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                            modifier = Modifier.size(40.dp)
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
+                            // ✅ Icône de notification avec badge
+                            Surface(
+                                onClick = {
+                                    internalNavController.navigate("notifications") {
+                                        launchSingleTop = true
+                                    }
+                                },
+                                shape = CircleShape,
+                                color = BackgroundDark,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                                modifier = Modifier.size(40.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(CardDark.copy(alpha = 0.5f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    BadgedBox(
+                                        badge = {
+                                            if (unreadNotifCount > 0) {
+                                                Badge(
+                                                    containerColor = Color(0xFFFF4444),
+                                                    contentColor = Color.White
+                                                ) {
+                                                    Text(
+                                                        text = if (unreadNotifCount > 99) "99+" else "$unreadNotifCount",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 10.sp
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Notifications,
+                                            contentDescription = "Notifications",
+                                            tint = GreenAccent,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Menu dropdown existant
+                            Surface(
+                                onClick = { showOptions = !showOptions },
+                                shape = CircleShape,
+                                color = BackgroundDark,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
+                                modifier = Modifier.size(40.dp)
+                            ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -281,6 +449,7 @@ fun TabBarView(
                                         .rotate(rotation)
                                 )
                             }
+                        }
                         }
                     }
                 }
@@ -303,7 +472,15 @@ fun TabBarView(
                         )
                     ) + fadeOut()
                 ) {
-                    GlassDropdownMenu(onLogout = { showLogoutDialog = true })
+                    GlassDropdownMenu(
+                        onLogout = { showLogoutDialog = true },
+                        onSavedClick = {
+                            showOptions = false
+                            internalNavController.navigate("saved") {
+                                launchSingleTop = true
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -320,85 +497,145 @@ fun TabBarView(
                     tabs = tabs,
                     selectedIndex = selectedTab,
                     onTabSelected = { index ->
-                        selectedTab = index
-                        when (index) {
-                            0 -> internalNavController.navigate("home") {
-                                popUpTo("home") { inclusive = true }
-                            }
-                            1 -> internalNavController.navigate("messages") {
-                                popUpTo("home") { saveState = true }
+                        // Navigation simple et directe
+                        val route = when (index) {
+                            0 -> "home"
+                            1 -> "messages"
+                            2 -> "add"
+                            3 -> "feed"
+                            4 -> "profile"
+                            else -> "home"
+                        }
+
+                        Log.d("TabBarView", "🔘 Tab clicked: index=$index, route=$route, currentRoute=$currentRoute")
+
+                        // Naviguer uniquement si la route est différente
+                        if (currentRoute != route) {
+                            Log.d("TabBarView", "➡️ Navigating from $currentRoute to $route")
+                            internalNavController.navigate(route) {
+                                // Nettoyer le backstack jusqu'à home
+                                popUpTo("home") {
+                                    saveState = true
+                                    inclusive = (route == "home") // Si on va à home, l'inclure pour le remplacer
+                                }
                                 launchSingleTop = true
                                 restoreState = true
                             }
-                            2 -> internalNavController.navigate("add") {
-                                popUpTo("home") { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                            3 -> internalNavController.navigate("feed") {
-                                popUpTo("home") { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                            4 -> internalNavController.navigate("profile") {
-                                popUpTo("home") { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
+                        } else {
+                            Log.d("TabBarView", "⏸️ Already on $route, not navigating")
                         }
                     }
                 )
             }
         }
-    }
 
-    // Logout Dialog
-    if (showLogoutDialog) {
-        AlertDialog(
-            onDismissRequest = { showLogoutDialog = false },
-            title = {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        Icons.Default.Logout,
-                        contentDescription = null,
-                        tint = ErrorRed
-                    )
-                    Text("Logout", fontWeight = FontWeight.Bold)
-                }
-            },
-            text = { Text("Are you sure you want to logout?") },
-            confirmButton = {
-                Button(
-                    onClick = {
-                        loginViewModel.logout(context, chatViewModel)
-                        showLogoutDialog = false
-                        navController.navigate("login") {
-                            popUpTo(0) { inclusive = true }
-                        }
+        // ✅ NEW: Eligible Sorties Rating Popup (shows on top of everything with higher z-index)
+        if (showEligibleRatingPopup && eligibleSorties.isNotEmpty() && currentRoute == "home") {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.75f)) // Darker overlay
+                    .clickable(enabled = false) {} // Prevent clicks through
+            ) {
+                EligibleSortiesRatingDialog(
+                    eligibleSorties = eligibleSorties,
+                    onDismiss = {
+                        showEligibleRatingPopup = false
                     },
-                    colors = ButtonDefaults.buttonColors(ErrorRed)
-                ) {
-                    Text("Confirm")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showLogoutDialog = false }) {
-                    Text("Cancel", color = TextTertiary)
-                }
-            },
-            containerColor = CardDark,
-            titleContentColor = TextPrimary,
-            textContentColor = TextSecondary,
-            shape = RoundedCornerShape(20.dp)
-        )
+                    onRateSortie = { sortieId ->
+                        selectedSortieForRating = sortieId
+                        showIndividualRatingDialog = true
+                    },
+                    onRateLater = {
+                        showEligibleRatingPopup = false
+                    }
+                )
+            }
+        }
+
+        // ✅ NEW: Individual Rating Dialog (for rating a specific sortie)
+        if (showIndividualRatingDialog && selectedSortieForRating != null) {
+            RatingDialog(
+                onDismiss = {
+                    showIndividualRatingDialog = false
+                    selectedSortieForRating = null
+                    ratingViewModel.clearMessages()
+                },
+                onSubmit = { rating, comment ->
+                    val token = UserPreferences.getToken(context) ?: ""
+                    ratingViewModel.submitRating(
+                        sortieId = selectedSortieForRating!!,
+                        stars = rating,
+                        comment = comment,
+                        token = token,
+                        onSuccess = {
+                            // Success is handled in LaunchedEffect above
+                        }
+                    )
+                },
+                isLoading = ratingIsLoading,
+                errorMessage = ratingError
+            )
+        }
+
+        // Logout Dialog
+        if (showLogoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showLogoutDialog = false },
+                title = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Logout,
+                            contentDescription = null,
+                            tint = ErrorRed
+                        )
+                        Text("Logout", fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = { Text("Are you sure you want to logout?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            loginViewModel.logout(context, chatViewModel)
+                            showLogoutDialog = false
+                            navController.navigate("login") {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(ErrorRed)
+                    ) {
+                        Text("Confirm")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLogoutDialog = false }) {
+                        Text("Cancel", color = TextTertiary)
+                    }
+                },
+                containerColor = CardDark,
+                titleContentColor = TextPrimary,
+                textContentColor = TextSecondary,
+                shape = RoundedCornerShape(20.dp)
+            )
+        }
+
+        // ✅ NEW: Show error snackbar if rating fails
+        ratingError?.let { error ->
+            LaunchedEffect(error) {
+                Log.e("TabBarView", "⚠️ Rating error displayed: $error")
+            }
+        }
     }
 }
 
 @Composable
-fun GlassDropdownMenu(onLogout: () -> Unit) {
+fun GlassDropdownMenu(
+    onLogout: () -> Unit,
+    onSavedClick: () -> Unit
+) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -422,7 +659,11 @@ fun GlassDropdownMenu(onLogout: () -> Unit) {
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            GlassMenuItem(icon = Icons.Default.BookmarkBorder, label = "Saved")
+            GlassMenuItem(
+                icon = Icons.Default.BookmarkBorder,
+                label = "Saved",
+                onClick = onSavedClick
+            )
             GlassMenuItem(icon = Icons.Default.HelpOutline, label = "Help Center")
             GlassMenuItem(icon = Icons.Default.Settings, label = "Settings")
             GlassMenuItem(
@@ -603,7 +844,6 @@ fun GlassBottomNav(
                                     },
                                     contentDescription = label,
                                     tint = if (selectedIndex == index)
-
                                         GreenAccent
                                     else
                                         TextSecondary,
