@@ -169,35 +169,29 @@ class LoginViewModel(
     }
 
     /**
-     * ✅ AJOUTÉ: Fonction de logout avec nettoyage du chat
+     * ✅ COMPLETE logout with proper session cleanup
      */
     fun logout(context: Context, chatViewModel: com.example.dam.viewmodel.ChatViewModel) {
         Log.d(TAG, "========== LOGOUT ==========")
         Log.d(TAG, "🔴 Starting logout process")
 
-        // ✅ 1. Nettoyer le chat et déconnecter le socket
+        // ✅ 1. Disconnect chat and socket
         chatViewModel.disconnect()
         Log.d(TAG, "✅ Chat disconnected")
 
-        // ✅ 2. Supprimer les tokens
-        val sharedPref = context.getSharedPreferences("cycle_app_prefs", Context.MODE_PRIVATE)
-        val tokenBefore = sharedPref.getString("auth_token", null)
-        Log.d(TAG, "🔑 Token avant: ${tokenBefore?.take(20)}")
+        // ✅ 2. Clear ALL user session data (UserPreferences + auth_prefs) for complete isolation
+        com.example.dam.utils.UserPreferences.clearAllSessionData(context)
+        Log.d(TAG, "✅ All session data cleared (UserPreferences + auth_prefs)")
 
-        sharedPref.edit().apply {
-            remove("auth_token")
-            remove("user_id")
-            apply()
-        }
+        // ✅ 3. Clear ChatStateManager optimistic states (prevent badge leakage)
+        com.example.dam.utils.ChatStateManager.clearAllOptimisticStates()
+        Log.d(TAG, "✅ ChatStateManager optimistic states cleared")
 
-        val tokenAfter = sharedPref.getString("auth_token", null)
-        Log.d(TAG, "🔑 Token après: $tokenAfter")
-
-        // ✅ 3. Réinitialiser l'état du ViewModel
+        // ✅ 4. Reset ViewModel state
         _uiState.value = LoginUiState()
         _accessToken = ""
 
-        Log.d(TAG, "✅ Logout complete")
+        Log.d(TAG, "✅ Logout complete - ready for new user")
         Log.d(TAG, "============================")
     }
 

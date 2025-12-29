@@ -1,6 +1,5 @@
 package com.example.dam.Screens
 
-import android.content.Context
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -32,6 +31,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.example.dam.R
 import com.example.dam.ui.theme.*
+import com.example.dam.utils.UserPreferences
 import com.example.dam.viewmodel.UserProfileViewModel
 import com.example.dam.viewmodel.UserViewModel        // ← This is the one that has uploadAvatar
 import androidx.lifecycle.ViewModelProvider
@@ -43,10 +43,9 @@ fun ProfileScreen(
 ) {
     val context = LocalContext.current
 
-    // Token & userId
-    val sharedPref = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-    val token = sharedPref.getString("access_token", "") ?: ""
-    val userId = sharedPref.getString("user_id", "") ?: ""
+    // ✅ FIX: Use UserPreferences for consistent session management
+    val token = UserPreferences.getToken(context) ?: ""
+    val userId = UserPreferences.getUserId(context) ?: ""
 
     // ViewModels
     val profileViewModel: UserProfileViewModel = viewModel(

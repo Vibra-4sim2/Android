@@ -71,4 +71,33 @@ class ChatRepository {
             Result.failure(e)
         }
     }
+
+    /**
+     * Marque tous les messages d'un chat comme lus
+     * @param chatId ID du chat
+     * @param token Token JWT (format: "Bearer xxx")
+     * @return Result<Unit> indiquant le succès ou l'échec
+     */
+    suspend fun markChatAsRead(
+        chatId: String,
+        token: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            Log.d(TAG, "📖 Marking chat as read: $chatId")
+
+            val response = chatApi.markChatAsRead(chatId, token)
+
+            if (response.isSuccessful) {
+                Log.d(TAG, "✅ Chat marked as read successfully")
+                Result.success(Unit)
+            } else {
+                val errorMsg = "❌ Error marking chat as read: ${response.code()} - ${response.message()}"
+                Log.e(TAG, errorMsg)
+                Result.failure(Exception(errorMsg))
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Exception marking chat as read: ${e.message}", e)
+            Result.failure(e)
+        }
+    }
 }

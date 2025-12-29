@@ -42,55 +42,22 @@ fun MessagesListScreen(
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
-    // ✅ Initialize ChatStateManager with context to enable persistence
+    // ✅ Initialize ChatStateManager with context
     LaunchedEffect(Unit) {
         ChatStateManager.initialize(context)
-    }
-
-    // ✅ Charger les chats au démarrage
-    LaunchedEffect(Unit) {
         viewModel.loadUserChats(context)
     }
 
-    // ✅ Rafraîchir quand on revient de la conversation
-    // Utiliser lifecycle pour détecter quand l'écran devient visible
+    // ✅ Refresh when returning to messages list
     DisposableEffect(lifecycleOwner) {
         val callback = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                android.util.Log.d("MessagesListScreen", "========================================")
-                android.util.Log.d("MessagesListScreen", "🔄 ON_RESUME: Starting refresh cycle...")
-                android.util.Log.d("MessagesListScreen", "========================================")
-
-                // Rafraîchir la liste quand on revient sur cet écran
-                // Multiple refresh strategy with optimized timings
+                android.util.Log.d("MessagesListScreen", "🔄 ON_RESUME: Refreshing chat list")
+                // Small delay to let any pending operations complete
                 coroutineScope.launch {
-                    // ✅ First refresh after 500ms (give backend time to process markAsRead)
-                    delay(500)
-                    android.util.Log.d("MessagesListScreen", "🔄 Refresh #1: After 500ms (backend sync time)")
+                    delay(300) // Quick refresh
+                    android.util.Log.d("MessagesListScreen", "🔄 Loading updated chat list after delay...")
                     viewModel.loadUserChats(context)
-
-                    // Deuxième refresh après 1.5s total
-                    delay(1000) // total 1.5s
-                    android.util.Log.d("MessagesListScreen", "🔄 Refresh #2: After 1.5s")
-                    viewModel.loadUserChats(context)
-
-                    // Troisième refresh après 3s total
-                    delay(1500) // total 3s
-                    android.util.Log.d("MessagesListScreen", "🔄 Refresh #3: After 3s")
-                    viewModel.loadUserChats(context)
-
-                    // Quatrième refresh après 5s
-                    delay(2000) // total 5s
-                    android.util.Log.d("MessagesListScreen", "🔄 Refresh #4: After 5s")
-                    viewModel.loadUserChats(context)
-
-                    // Cinquième refresh après 10s (pour backends lents)
-                    delay(5000) // total 10s
-                    android.util.Log.d("MessagesListScreen", "🔄 Refresh #5 (FINAL): After 10s")
-                    viewModel.loadUserChats(context)
-
-                    android.util.Log.d("MessagesListScreen", "✅ Refresh cycle complete (5 refreshes over 10s)")
-                    android.util.Log.d("MessagesListScreen", "========================================")
                 }
             }
         }
@@ -101,6 +68,7 @@ fun MessagesListScreen(
             lifecycleOwner.lifecycle.removeObserver(callback)
         }
     }
+
 
     Box(
         modifier = Modifier
@@ -359,7 +327,7 @@ fun MessagesListScreen(
                                 GroupChatItem(
                                     group = group,
                                     onClick = {
-                                        // ✅ Utiliser sortieId au lieu de group.id
+                                        // Navigate to chat conversation
                                         val encodedGroupName = java.net.URLEncoder.encode(group.name, "UTF-8")
                                         val encodedEmoji = java.net.URLEncoder.encode(group.emoji, "UTF-8")
 
@@ -419,80 +387,23 @@ fun GroupChatItem(group: ChatGroupUI, onClick: () -> Unit) {
         group.timestamp?.let { com.example.dam.models.formatTime(it) } ?: group.time
     }
 
-    // ✅ Check optimistic state for immediate badge hiding
+    // ✅ OPTIMISTIC BADGE HIDING: Use ChatStateManager to hide badges while viewing
     val recentlyOpenedChats by ChatStateManager.recentlyOpenedChats.collectAsState()
-    val isOptimisticallyRead = recentlyOpenedChats.contains(group.sortieId)
+    val isChatCurrentlyViewing = recentlyOpenedChats.contains(group.sortieId)
 
-    // ✅ Remember the last message timestamp to detect new messages
-    // Initialize with current timestamp to establish baseline
-    val lastMessageTime = remember(group.sortieId) { mutableStateOf(group.timestamp ?: "") }
-
-    // ✅ Update lastMessageTime when not in optimistic state (to track actual last message)
-    LaunchedEffect(group.timestamp) {
-        if (!isOptimisticallyRead && group.timestamp != null) {
-            lastMessageTime.value = group.timestamp
-        }
+    // FIXED LOGIC:
+    // - If chat is currently being viewed (in ChatConversation screen), hide badge
+    // - Otherwise, show badge based on backend's unreadCount
+    // - When user leaves chat, it's removed from recentlyOpenedChats, so badge can reappear
+    val effectiveUnreadCount = if (isChatCurrentlyViewing) {
+        0  // Hide badge while actively viewing this chat
+    } else {
+        group.unreadCount  // Show badge based on actual unread count
     }
 
-    // ✅ CRITICAL: Badge is ALWAYS hidden if optimistically marked as read
-    // UNLESS a new message has arrived (different timestamp)
-    val hasNewMessage = remember(isOptimisticallyRead, group.timestamp, lastMessageTime.value) {
-        if (isOptimisticallyRead && group.timestamp != null && lastMessageTime.value.isNotEmpty()) {
-            group.timestamp != lastMessageTime.value
-        } else {
-            false
-        }
-    }
-
-    val effectiveUnreadCount = remember(isOptimisticallyRead, group.unreadCount, hasNewMessage) {
-        if (isOptimisticallyRead && !hasNewMessage) {
-            0  // Force badge to be hidden (optimistic)
-        } else {
-            group.unreadCount  // Show backend's unread count
-        }
-    }
-
-    // ✅ Debug logging - runs on every state change
-    LaunchedEffect(group.sortieId, group.unreadCount, isOptimisticallyRead, group.timestamp) {
-        android.util.Log.d("GroupChatItem", "========================================")
-        android.util.Log.d("GroupChatItem", "📊 Badge State for ${group.name}")
-        android.util.Log.d("GroupChatItem", "   sortieId: ${group.sortieId}")
-        android.util.Log.d("GroupChatItem", "   unreadCount (from backend): ${group.unreadCount}")
-        android.util.Log.d("GroupChatItem", "   isOptimisticallyRead: $isOptimisticallyRead")
-        android.util.Log.d("GroupChatItem", "   effectiveUnreadCount (displayed): $effectiveUnreadCount")
-        android.util.Log.d("GroupChatItem", "   lastMessage timestamp: ${group.timestamp}")
-        android.util.Log.d("GroupChatItem", "   lastMessageTime (stored): ${lastMessageTime.value}")
-        android.util.Log.d("GroupChatItem", "   All optimistic chats: $recentlyOpenedChats")
-
-        // ✅ Clear optimistic state ONLY when backend confirms read (unreadCount = 0)
-        if (isOptimisticallyRead && group.unreadCount == 0) {
-            // Backend confirmed all messages are read
-            ChatStateManager.clearOptimisticState(group.sortieId)
-            android.util.Log.d("GroupChatItem", "✅ Backend confirmed read (unreadCount=0), cleared optimistic state for ${group.sortieId}")
-            // Update the last message time
-            lastMessageTime.value = group.timestamp ?: ""
-        }
-        // ✅ NEW: Clear optimistic state if a NEW message arrives (timestamp changed)
-        else if (isOptimisticallyRead && group.unreadCount > 0) {
-            val currentTimestamp = group.timestamp ?: ""
-            if (currentTimestamp != lastMessageTime.value && lastMessageTime.value.isNotEmpty()) {
-                // New message detected (timestamp changed)
-                android.util.Log.d("GroupChatItem", "🆕 NEW MESSAGE detected! Clearing optimistic state")
-                android.util.Log.d("GroupChatItem", "   Old timestamp: ${lastMessageTime.value}")
-                android.util.Log.d("GroupChatItem", "   New timestamp: $currentTimestamp")
-                ChatStateManager.clearOptimisticState(group.sortieId)
-                lastMessageTime.value = currentTimestamp
-            } else {
-                // Backend still shows unread, keep optimistic state ACTIVE to hide badge
-                android.util.Log.d("GroupChatItem", "⏳ Optimistic state ACTIVE - keeping badge HIDDEN while waiting for backend (current unreadCount=${group.unreadCount})")
-            }
-        }
-        else if (!isOptimisticallyRead && group.unreadCount > 0) {
-            android.util.Log.d("GroupChatItem", "🔴 Badge should be VISIBLE - unread message exists and not optimistically read")
-            // Update the last message time
-            lastMessageTime.value = group.timestamp ?: ""
-        }
-        android.util.Log.d("GroupChatItem", "========================================")
+    // ✅ Log for debugging
+    LaunchedEffect(group.unreadCount, isChatCurrentlyViewing) {
+        android.util.Log.d("GroupChatItem", "[${group.sortieId.take(8)}] 📊 Badge=$effectiveUnreadCount (backend=${group.unreadCount}, viewing=$isChatCurrentlyViewing)")
     }
 
 

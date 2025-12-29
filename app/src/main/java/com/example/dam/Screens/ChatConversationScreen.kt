@@ -5,7 +5,6 @@ import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,6 +49,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+@Suppress("UNUSED_PARAMETER", "UNUSED_VARIABLE", "ASSIGNED_BUT_NEVER_ACCESSED_VARIABLE")
 @Composable
 fun ChatConversationScreen(
     navController: NavHostController,
@@ -238,19 +238,11 @@ fun ChatConversationScreen(
         android.util.Log.d("ChatConversationScreen", "========================================")
         android.util.Log.d("ChatConversationScreen", "🚀 LaunchedEffect(sortieId) DÉCLENCHÉ")
         android.util.Log.d("ChatConversationScreen", "📍 sortieId: $sortieId")
-        android.util.Log.d("ChatConversationScreen", "🔍 États UI actuels:")
-        android.util.Log.d("ChatConversationScreen", "   isConnected: $isConnected")
-        android.util.Log.d("ChatConversationScreen", "   isSending: $isSending")
-        android.util.Log.d("ChatConversationScreen", "   isLoading: $isLoading")
-        android.util.Log.d("ChatConversationScreen", "   messages count: ${messages.size}")
-        android.util.Log.d("ChatConversationScreen", "🔄 Appel de viewModel.connectAndJoinRoom()...")
         android.util.Log.d("ChatConversationScreen", "========================================")
 
-        // ✅ Initialize ChatStateManager with context to enable persistence
-        ChatStateManager.initialize(context)
-
-        // ✅ Optimistic UI: Mark chat as opened immediately
+        // ✅ MARK CHAT AS OPENED - This will hide the badge instantly
         ChatStateManager.markChatAsOpened(sortieId)
+        android.util.Log.d("ChatConversationScreen", "✅ Chat marked as opened in ChatStateManager")
 
         // ✅ Initialiser le contexte du ViewModel pour les WebSockets
         viewModel.setApplicationContext(context)
@@ -260,6 +252,18 @@ fun ChatConversationScreen(
         // ✅ Charger les sondages
         android.util.Log.d("ChatConversationScreen", "📊 Chargement des sondages...")
         viewModel.loadPolls(sortieId, context)
+
+        // ✅ IMPORTANT: Mark messages as read immediately when entering chat
+        android.util.Log.d("ChatConversationScreen", "📖 Marking all messages as read on entry...")
+        viewModel.markAllMessagesAsRead(sortieId, context)
+    }
+
+    // ✅ CLEANUP: Clear opened state when leaving chat
+    DisposableEffect(sortieId) {
+        onDispose {
+            android.util.Log.d("ChatConversationScreen", "🧹 Leaving chat, clearing opened state for: $sortieId")
+            ChatStateManager.clearOptimisticState(sortieId)
+        }
     }
 
     // ✅ Auto-scroll quand un nouveau message arrive (index 0 = bas avec reverseLayout)
@@ -294,17 +298,26 @@ fun ChatConversationScreen(
 
     // ✅ Cleanup: Quitter la room quand on quitte l'écran
     DisposableEffect(Unit) {
-        android.util.Log.d("ChatConversationScreen", "========================================")
-        android.util.Log.d("ChatConversationScreen", "🎬 DisposableEffect CRÉÉ pour sortieId: $sortieId")
-        android.util.Log.d("ChatConversationScreen", "========================================")
+        android.util.Log.d("ChatConversationScreen", "🎬 Screen entered for sortieId: $sortieId")
 
         onDispose {
             android.util.Log.d("ChatConversationScreen", "========================================")
-            android.util.Log.d("ChatConversationScreen", "🚪 DisposableEffect onDispose APPELÉ")
-            android.util.Log.d("ChatConversationScreen", "📍 sortieId concerné: $sortieId")
-            android.util.Log.d("ChatConversationScreen", "🔄 Appel de viewModel.leaveRoom()...")
-            android.util.Log.d("ChatConversationScreen", "========================================")
+            android.util.Log.d("ChatConversationScreen", "🚪 Leaving chat screen")
+            android.util.Log.d("ChatConversationScreen", "📍 sortieId: $sortieId")
+
+            // ✅ Force mark as read one more time before leaving
+            android.util.Log.d("ChatConversationScreen", "📖 Final markAllMessagesAsRead() before leaving...")
+            viewModel.forceMarkAllAsReadSync(sortieId, context)
+
+            // ✅ DON'T clear optimistic state - keep badge hidden until new message arrives
+            // ChatStateManager.clearOptimisticState(sortieId)  // REMOVED - Let badges stay hidden!
+            android.util.Log.d("ChatConversationScreen", "✅ Keeping chat marked as read (not clearing optimistic state)")
+
+            // Leave WebSocket room
             viewModel.leaveRoom()
+
+            android.util.Log.d("ChatConversationScreen", "✅ Chat screen cleanup completed")
+            android.util.Log.d("ChatConversationScreen", "========================================")
         }
     }
 
@@ -536,7 +549,11 @@ fun ChatConversationScreen(
                             reverseLayout = true
                         ) {
                             // Items triés chronologiquement (reversed car reverseLayout)
-                            items(combinedItems.reversed(), key = { it.id }) { item ->
+                            items(
+                                count = combinedItems.size,
+                                key = { index -> combinedItems.reversed()[index].id }
+                            ) { index ->
+                                val item = combinedItems.reversed()[index]
                                 when (item.type) {
                                     "message" -> {
                                         item.messageUI?.let { msg ->

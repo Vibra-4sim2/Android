@@ -7,7 +7,9 @@ import androidx.lifecycle.viewModelScope
 import com.example.dam.models.*
 import com.example.dam.remote.SocketService
 import com.example.dam.repository.MessageRepository
+import com.example.dam.repository.ChatRepository
 import com.example.dam.utils.ChatStateManager
+import com.example.dam.utils.UserPreferences
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +20,7 @@ import java.io.File
 class ChatViewModel : ViewModel() {
 
     private val messageRepository = MessageRepository()
+    private val chatRepository = ChatRepository()
     private val TAG = "ChatViewModel"
 
     private val _isConnected = MutableStateFlow(false)
@@ -48,6 +51,7 @@ class ChatViewModel : ViewModel() {
     val isLoadingPolls: StateFlow<Boolean> = _isLoadingPolls.asStateFlow()
 
     private var currentSortieId: String? = null
+    private var currentChatId: String? = null
     private var currentUserId: String? = null
     private var sendTimeoutJob: Job? = null
 
@@ -96,10 +100,14 @@ class ChatViewModel : ViewModel() {
 
                 Log.d(TAG, "📦 ${messagesUI.size} messages affichés")
 
-                // ✅ NOUVEAU: Marquer tous les messages non lus comme lus avec un petit délai
+                // ✅ Mark all unread messages as read with a small delay
                 viewModelScope.launch {
-                    kotlinx.coroutines.delay(500) // Petit délai pour laisser l'UI se stabiliser
-                    markAllMessagesAsRead()
+                    kotlinx.coroutines.delay(200) // Small delay to let UI stabilize
+                    currentSortieId?.let { sortieId ->
+                        getApplicationContext()?.let { context ->
+                            markAllMessagesAsRead(sortieId, context)
+                        }
+                    }
                 }
             }
 
@@ -309,6 +317,17 @@ class ChatViewModel : ViewModel() {
                     return@launch
                 }
 
+                // ✅ CRITICAL FIX: Fetch chatId from backend before connecting
+                Log.d(TAG, "🔍 Fetching chatId for sortieId: $sortieId")
+                val chatResult = chatRepository.getChatBySortie(sortieId, "Bearer $token")
+                chatResult.onSuccess { chatResponse ->
+                    currentChatId = chatResponse.id
+                    Log.d(TAG, "✅ ChatId fetched: $currentChatId")
+                }.onFailure { error ->
+                    Log.e(TAG, "❌ Failed to fetch chatId: ${error.message}")
+                    // Continue anyway, we can still use WebSocket
+                }
+
                 if (!SocketService.isConnected()) {
                     Log.d(TAG, "🔌 Connexion au serveur Socket.IO...")
                     SocketService.connect(token)
@@ -373,21 +392,23 @@ class ChatViewModel : ViewModel() {
 
         currentSortieId?.let { sortieId ->
             // ✅ CRITICAL FIX: Mark all messages as read BEFORE leaving
-            // Use runBlocking to ensure this completes before we leave the room
+            // Launch in viewModelScope to ensure this completes before we leave
             Log.d(TAG, "📖 Marquage final des messages comme lus avant de quitter...")
 
-            try {
-                kotlinx.coroutines.runBlocking {
+            viewModelScope.launch {
+                try {
                     // Mark all messages as read
-                    markAllMessagesAsRead()
+                    getApplicationContext()?.let { context ->
+                        markAllMessagesAsRead(sortieId, context)
+                    }
 
                     // CRITICAL: Wait extra time to ensure WebSocket events are sent
                     // This prevents badge from reappearing when user navigates back quickly
-                    kotlinx.coroutines.delay(800) // 800ms to ensure backend receives events
-                    Log.d(TAG, "✅ Waited 800ms for mark-as-read events to be sent")
+                    kotlinx.coroutines.delay(1000) // 1s to ensure backend receives and processes all events
+                    Log.d(TAG, "✅ Waited 1000ms for mark-as-read events to be sent and processed")
+                } catch (e: Exception) {
+                    Log.e(TAG, "⚠️ Error waiting for mark-as-read: ${e.message}")
                 }
-            } catch (e: Exception) {
-                Log.e(TAG, "⚠️ Error waiting for mark-as-read: ${e.message}")
             }
 
             // ✅ Nettoyer TOUT l'état au leave
@@ -630,47 +651,130 @@ class ChatViewModel : ViewModel() {
 
     /**
      * ✅ NOUVEAU: Marquer tous les messages non lus comme lus
+     * Made public to allow calling when entering chat screen
      */
-    private fun markAllMessagesAsRead() {
+    fun markAllMessagesAsRead(sortieId: String, context: Context) {
         viewModelScope.launch {
             try {
+                Log.d(TAG, "========================================")
+                Log.d(TAG, "📖 markAllMessagesAsRead() called")
+                Log.d(TAG, "📍 sortieId: $sortieId")
+                Log.d(TAG, "📍 currentSortieId: $currentSortieId")
+                Log.d(TAG, "📍 currentChatId: $currentChatId")
+
                 currentUserId?.let { userId ->
+                    Log.d(TAG, "👤 Current userId: $userId")
+
                     // Trouver tous les messages qui ne sont pas "read" par l'utilisateur courant
                     val unreadMessages = _messages.value.filter { message ->
                         !message.isMe && message.status != MessageStatus.READ
                     }
 
-                    Log.d(TAG, "========================================")
-                    Log.d(TAG, "📖 Marquage de ${unreadMessages.size} messages comme lus")
-                    Log.d(TAG, "👤 Current userId: $userId")
-                    Log.d(TAG, "📍 Current sortieId: $currentSortieId")
+                    Log.d(TAG, "📊 Total messages: ${_messages.value.size}")
+                    Log.d(TAG, "📊 Unread messages: ${unreadMessages.size}")
 
-                    // Marquer chaque message comme lu via WebSocket avec un petit délai entre chaque
-                    unreadMessages.forEachIndexed { index, message ->
-                        currentSortieId?.let { sortieId ->
-                            Log.d(TAG, "   📧 Message ${index + 1}/${unreadMessages.size}: ${message.id}")
-                            SocketService.markAsRead(message.id, sortieId)
+                    // ✅ CRITICAL FIX: Call backend API to mark chat as read
+                    val token = UserPreferences.getToken(context)
+                    if (token.isNullOrEmpty()) {
+                        Log.e(TAG, "❌ No token available for API call")
+                        return@let
+                    }
 
-                            // ✅ Petit délai entre chaque message pour éviter de surcharger le WebSocket
-                            if (index < unreadMessages.size - 1) {
-                                kotlinx.coroutines.delay(50) // 50ms entre chaque message
-                            }
+                    // First, ensure we have the chatId
+                    val chatId = currentChatId ?: run {
+                        Log.d(TAG, "⚠️ No chatId available, fetching from backend...")
+                        val chatResult = chatRepository.getChatBySortie(sortieId, "Bearer $token")
+                        chatResult.getOrNull()?.id?.also {
+                            Log.d(TAG, "✅ ChatId fetched: $it")
+                            currentChatId = it
                         }
                     }
 
-                    // ✅ Délai final pour s'assurer que tous les événements sont envoyés
-                    if (unreadMessages.isNotEmpty()) {
-                        kotlinx.coroutines.delay(200)
-                        Log.d(TAG, "✅ Tous les ${unreadMessages.size} messages marqués comme lus avec délais appropriés")
-                    } else {
-                        Log.d(TAG, "ℹ️ Aucun message non lu à marquer")
+                    if (chatId == null) {
+                        Log.e(TAG, "❌ Failed to get chatId")
+                        return@let
+                    }
+
+                    // Now mark the chat as read
+                    Log.d(TAG, "🌐 Calling backend API to mark chat as read (chatId: $chatId)...")
+                    val result = chatRepository.markChatAsRead(chatId, "Bearer $token")
+                    result.onSuccess {
+                        Log.d(TAG, "✅✅✅ Backend API: Chat marked as read successfully!")
+                        // Small delay to ensure backend processes the update
+                        kotlinx.coroutines.delay(300)
+                        Log.d(TAG, "✅ Mark as read completed")
+                    }.onFailure { error ->
+                        Log.e(TAG, "❌ Backend API failed: ${error.message}", error)
+                        // Log the full stack trace for debugging
+                        error.printStackTrace()
                     }
 
                     Log.d(TAG, "========================================")
+                } ?: run {
+                    Log.e(TAG, "❌ No userId available")
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "❌ Erreur marquage messages lus: ${e.message}")
+                Log.e(TAG, "❌ Erreur marquage messages lus: ${e.message}", e)
+                e.printStackTrace()
+                Log.d(TAG, "========================================")
             }
+        }
+    }
+
+    /**
+     * ✅ Force mark all messages as read synchronously (blocking call for cleanup)
+     * This is called when user leaves the chat screen to ensure backend is updated
+     */
+    fun forceMarkAllAsReadSync(sortieId: String, context: Context) {
+        try {
+            Log.d(TAG, "========================================")
+            Log.d(TAG, "🚨 FORCE MARK AS READ SYNC - sortieId: $sortieId")
+            Log.d(TAG, "========================================")
+
+            // Get token and chatId
+            val token = UserPreferences.getToken(context)
+            if (token.isNullOrEmpty()) {
+                Log.e(TAG, "❌ No token available")
+                return
+            }
+
+            // Call backend API synchronously (using runBlocking in this case since we're in cleanup)
+            currentChatId?.let { chatId ->
+                Log.d(TAG, "🌐 Calling backend API to mark chat as read (chatId: $chatId)...")
+
+                // Use runBlocking to ensure this completes before navigation
+                kotlinx.coroutines.runBlocking {
+                    val result = chatRepository.markChatAsRead(chatId, "Bearer $token")
+                    result.onSuccess {
+                        Log.d(TAG, "✅✅✅ Backend API: Chat marked as read successfully (FORCED)")
+                        // Small delay to ensure backend processes the update
+                        kotlinx.coroutines.delay(300)
+                    }.onFailure { error ->
+                        Log.e(TAG, "❌ Backend API failed: ${error.message}")
+                    }
+                }
+            } ?: run {
+                Log.e(TAG, "⚠️ No chatId available, fetching from backend...")
+                // Try to fetch chatId if not available
+                kotlinx.coroutines.runBlocking {
+                    val chatResult = chatRepository.getChatBySortie(sortieId, "Bearer $token")
+                    chatResult.onSuccess { chatResponse ->
+                        Log.d(TAG, "✅ ChatId fetched: ${chatResponse.id}")
+                        val result = chatRepository.markChatAsRead(chatResponse.id, "Bearer $token")
+                        result.onSuccess {
+                            Log.d(TAG, "✅✅✅ Backend API: Chat marked as read successfully (FORCED with fetch)")
+                        }.onFailure { error ->
+                            Log.e(TAG, "❌ Backend API failed: ${error.message}")
+                        }
+                    }.onFailure { error ->
+                        Log.e(TAG, "❌ Failed to fetch chatId: ${error.message}")
+                    }
+                }
+            }
+
+            Log.d(TAG, "========================================")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error in forceMarkAllAsReadSync: ${e.message}", e)
         }
     }
 

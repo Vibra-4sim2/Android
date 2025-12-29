@@ -51,6 +51,7 @@ import kotlinx.coroutines.launch
 import com.example.dam.services.NotificationPollingService
 import com.example.dam.utils.NotificationHelper
 import com.example.dam.utils.UserPreferences
+import com.example.dam.utils.ChatStateManager
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -109,6 +110,10 @@ class MainActivity : ComponentActivity() {
             .build()
 
         googleSignInClient = GoogleSignIn.getClient(this, gso)
+
+        // ✅ INITIALISER CHATSTATEMANAGER pour la persistance des badges
+        ChatStateManager.initialize(applicationContext)
+        Log.d("MainActivity", "✅ ChatStateManager initialized")
 
         // ✅ INITIALISER LE SYSTÈME DE NOTIFICATION
         initializeNotificationSystem()
@@ -408,7 +413,7 @@ fun NavigationGraph(
 
             ChatConversationScreen(
                 navController = navController,
-                sortieId = sortieId, // ✅ CORRIGÉ: utiliser sortieId au lieu de groupId
+                sortieId = sortieId,
                 groupName = groupName,
                 groupEmoji = groupEmoji,
                 participantsCount = participantsCount

@@ -131,4 +131,13 @@ class UserViewModel : ViewModel() {
     fun clearError() {
         _errorMessage.value = null
     }
+
+    /**
+     * ✅ Clear all user data (called on logout to prevent session leakage)
+     */
+    fun clearUserData() {
+        _currentUser.value = null
+        _isLoading.value = false
+        _errorMessage.value = null
+    }
 }

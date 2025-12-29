@@ -267,4 +267,22 @@ class UserProfileViewModel(private val context: Context) : ViewModel() {
     fun clearError() {
         _errorMessage.value = null
     }
+
+    /**
+     * ✅ Clear all user profile data (called on logout to prevent session leakage)
+     */
+    fun clearUserData() {
+        _user.value = null
+        _userParticipations.value = emptyList()
+        _userSorties.value = emptyList()
+        _userPublications.value = emptyList()
+        _userRating.value = null
+        _isLoading.value = false
+        _isFollowing.value = false
+        _followersCount.value = 0
+        _followingCount.value = 0
+        _followingIds.value = emptySet()
+        _errorMessage.value = null
+        _currentUserId.value = null
+    }
 }

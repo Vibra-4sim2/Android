@@ -12,7 +12,8 @@ data class ChatResponse(
     @SerializedName("members") val members: List<ChatMember>,
     @SerializedName("lastMessage") val lastMessage: LastMessage?,
     @SerializedName("name") val name: String?,
-    @SerializedName("avatar") val avatar: String?
+    @SerializedName("avatar") val avatar: String?,
+    @SerializedName("unreadCount") val unreadCount: Int? = null  // ✅ Backend-provided unread count
 )
 
 /**
@@ -33,9 +34,9 @@ data class LastMessage(
     @SerializedName("_id") val id: String,
     @SerializedName("chatId") val chatId: String,
     @SerializedName("sortieId") val sortieId: String,
-    @SerializedName("senderId") val senderId: String,
-    @SerializedName("type") val type: String, // "text", "image", etc.
-    @SerializedName("content") val content: String,
+    @SerializedName("senderId") val senderId: String?,  // ✅ Nullable for system messages
+    @SerializedName("type") val type: String, // "text", "image", "poll", "system", etc.
+    @SerializedName("content") val content: String?,  // ✅ Nullable since polls don't have content
     @SerializedName("readBy") val readBy: List<String>,
     @SerializedName("isDeleted") val isDeleted: Boolean,
     @SerializedName("createdAt") val createdAt: String?
@@ -64,8 +65,14 @@ data class ChatGroupUI(
 fun ChatResponse.toChatGroupUI(currentUserId: String): ChatGroupUI {
     // Récupérer l'auteur du dernier message
     val lastMessageAuthor = if (lastMessage != null) {
-        val sender = members.find { it.id == lastMessage.senderId }
-        sender?.firstName ?: "Inconnu"
+        when {
+            lastMessage.senderId == null || lastMessage.type == "system" -> "Système"
+            lastMessage.senderId == currentUserId -> "Vous"
+            else -> {
+                val sender = members.find { it.id == lastMessage.senderId }
+                sender?.firstName ?: "Inconnu"
+            }
+        }
     } else {
         ""
     }
@@ -73,11 +80,13 @@ fun ChatResponse.toChatGroupUI(currentUserId: String): ChatGroupUI {
     // ✅ CORRIGÉ: Formater le contenu du dernier message selon son type
     val lastMessageContent = if (lastMessage != null) {
         when (lastMessage.type.lowercase()) {
+            "poll" -> "📊 Sondage"
             "image" -> "📷 Photo"
             "audio" -> "🎤 Message vocal"
             "video" -> "🎥 Vidéo"
             "location" -> "📍 Position"
             "file" -> "📎 Fichier"
+            "system" -> lastMessage.content ?: "Message système"
             else -> lastMessage.content ?: "Aucun message"
         }
     } else {
@@ -87,14 +96,15 @@ fun ChatResponse.toChatGroupUI(currentUserId: String): ChatGroupUI {
     // Formater le temps
     val time = lastMessage?.createdAt?.let { formatTime(it) } ?: ""
 
-    // ✅ CORRIGÉ: Compter les messages non lus (messages où currentUserId n'est PAS dans readBy)
-    val unreadCount = if (lastMessage != null && !lastMessage.readBy.contains(currentUserId)) {
-        // Si le dernier message n'est pas lu, il y a au moins 1 message non lu
-        // Note: Pour un comptage précis de TOUS les messages non lus, il faudrait
-        // que le backend renvoie cette info. Pour l'instant, on se base sur le dernier message.
-        1
+    // ✅ SIMPLIFIED BADGE LOGIC (Backend readBy array not working):
+    // Show badge (1) if last message is from someone else (not current user, not system)
+    // ChatStateManager in MessagesListScreen will hide it when chat is opened
+    val unreadCount = if (lastMessage != null &&
+                           lastMessage.senderId != null &&
+                           lastMessage.senderId != currentUserId) {
+        1  // Show badge - message from someone else
     } else {
-        0
+        0  // No badge - own message or system message
     }
 
     // Emoji par défaut

@@ -1,6 +1,5 @@
 package com.example.dam.Screens
 
-import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -10,7 +9,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -24,12 +22,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import com.example.dam.utils.UserPreferences
 import com.example.dam.viewmodel.UserViewModel
 
 // Colors
 private val BackgroundColor = Color(0xFF0F0F0F)
 private val SecondaryTextColor = Color(0xFFBDBDBD)
-private val PrimaryTextColor = Color.White
 private val AccentGreen = Color(0xFF4ADE80)
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,10 +36,9 @@ fun EditProfile1Screen(navController: NavHostController) {
     val context = LocalContext.current
     val viewModel: UserViewModel = viewModel()
 
-    // Get stored auth data
-    val sharedPref = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-    val token = sharedPref.getString("access_token", "") ?: ""
-    val userId = sharedPref.getString("user_id", "") ?: ""
+    // ✅ Get stored auth data from UserPreferences (SINGLE SOURCE OF TRUTH)
+    val token = UserPreferences.getToken(context) ?: ""
+    val userId = UserPreferences.getUserId(context) ?: ""
 
     // Form states
     var firstName by remember { mutableStateOf("") }

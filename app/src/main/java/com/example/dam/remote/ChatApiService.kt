@@ -33,4 +33,15 @@ interface ChatApiService {
     suspend fun getMyChats(
         @Header("Authorization") token: String
     ): Response<List<ChatResponse>>
+
+    /**
+     * Marque les messages d'un chat comme lus
+     * @param chatId ID du chat
+     * @param token Token JWT d'authentification
+     */
+    @retrofit2.http.POST("chats/{chatId}/mark-read")
+    suspend fun markChatAsRead(
+        @Path("chatId") chatId: String,
+        @Header("Authorization") token: String
+    ): Response<Unit>
 }
