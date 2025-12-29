@@ -2,7 +2,9 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose") version "2.0.0" // Ajout du plugin Compose
-    id("com.google.gms.google-services")}
+    id("com.google.devtools.ksp") version "2.0.0-1.0.21"
+    id("com.google.gms.google-services")
+}
 
 android {
     namespace = "com.example.dam"
@@ -131,6 +133,11 @@ dependencies {
 
     // Coil for image loading
     implementation("io.coil-kt:coil-compose:2.5.0")
+
+    // Room - Local Database
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
 
 
     // Socket.IO pour Android

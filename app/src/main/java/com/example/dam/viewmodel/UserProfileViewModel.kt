@@ -95,8 +95,22 @@ class UserProfileViewModel(private val context: Context) : ViewModel() {
                     val userResult = repository.getUserById(userId, token)
                     if (userResult is MyResult.Success<*>) {
                         _user.value = userResult.data as? UserProfileResponse
+
+                        // Debug logging
+                        _user.value?.let { user ->
+                            Log.d("UserProfileVM", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                            Log.d("UserProfileVM", "✅ User Profile Loaded:")
+                            Log.d("UserProfileVM", "User ID: ${user.id}")
+                            Log.d("UserProfileVM", "Name: ${user.firstName} ${user.lastName}")
+                            Log.d("UserProfileVM", "Email: ${user.email}")
+                            Log.d("UserProfileVM", "Avatar URL: ${user.avatar}")
+                            Log.d("UserProfileVM", "Avatar is null? ${user.avatar == null}")
+                            Log.d("UserProfileVM", "Avatar is empty? ${user.avatar?.isEmpty()}")
+                            Log.d("UserProfileVM", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        }
                     } else if (userResult is MyResult.Failure) {
                         _errorMessage.value = userResult.error.message
+                        Log.e("UserProfileVM", "❌ Failed to load user: ${userResult.error.message}")
                     }
                 } catch (e: Exception) {
                     Log.e("UserProfileVM", "Exception loading profile: ${e.message}")
@@ -131,15 +145,28 @@ class UserProfileViewModel(private val context: Context) : ViewModel() {
 
                 // Charger les publications
                 try {
+                    Log.d("UserProfileVM", "📝 Loading publications for userId: $userId")
                     val publicationsResult = repository.getUserPublications(userId)
-                    if (publicationsResult is MyResult.Success<*>) {
-                        val publications = publicationsResult.data as? List<*>
-                        _userPublications.value = publications?.filterIsInstance<PublicationResponse>() ?: emptyList()
-                    } else if (publicationsResult is MyResult.Failure) {
-                        Log.e("UserProfileVM", "Error loading publications")
+                    when (publicationsResult) {
+                        is com.example.dam.utils.Result.Success -> {
+                            _userPublications.value = publicationsResult.data
+                            Log.d("UserProfileVM", "✅ Publications loaded: ${_userPublications.value.size} items")
+                            _userPublications.value.forEachIndexed { index, pub ->
+                                Log.d("UserProfileVM", "  Publication #${index + 1}: ${pub.content.take(50)}...")
+                            }
+                        }
+                        is com.example.dam.utils.Result.Failure -> {
+                            Log.e("UserProfileVM", "❌ Error loading publications: ${publicationsResult.message.message}")
+                        }
+                        is com.example.dam.utils.Result.Error -> {
+                            Log.e("UserProfileVM", "❌ Error loading publications: ${publicationsResult.message}")
+                        }
+                        is com.example.dam.utils.Result.Loading -> {
+                            Log.d("UserProfileVM", "⏳ Loading publications...")
+                        }
                     }
                 } catch (e: Exception) {
-                    Log.e("UserProfileVM", "Exception loading publications: ${e.message}")
+                    Log.e("UserProfileVM", "❌ Exception loading publications: ${e.message}")
                 }
 
                 // ✅ NEW: Charger le rating du créateur

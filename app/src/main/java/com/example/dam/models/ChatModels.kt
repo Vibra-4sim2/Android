@@ -96,15 +96,20 @@ fun ChatResponse.toChatGroupUI(currentUserId: String): ChatGroupUI {
     // Formater le temps
     val time = lastMessage?.createdAt?.let { formatTime(it) } ?: ""
 
-    // ✅ SIMPLIFIED BADGE LOGIC (Backend readBy array not working):
-    // Show badge (1) if last message is from someone else (not current user, not system)
-    // ChatStateManager in MessagesListScreen will hide it when chat is opened
-    val unreadCount = if (lastMessage != null &&
+    // ✅ PERSISTENT BADGE LOGIC:
+    // - Check if last message is from someone else (not current user, not system)
+    // - Check if this chat has been read using ReadMessagesManager
+    // - Badge shows only if message is from someone else AND chat has NOT been read
+    val hasUnreadMessage = lastMessage != null &&
                            lastMessage.senderId != null &&
-                           lastMessage.senderId != currentUserId) {
-        1  // Show badge - message from someone else
+                           lastMessage.senderId != currentUserId
+
+    val isRead = com.example.dam.utils.ReadMessagesManager.isChatRead(sortieId)
+
+    val unreadCount = if (hasUnreadMessage && !isRead) {
+        1  // Show badge - unread message from someone else
     } else {
-        0  // No badge - own message or system message
+        0  // No badge - read or own message
     }
 
     // Emoji par défaut

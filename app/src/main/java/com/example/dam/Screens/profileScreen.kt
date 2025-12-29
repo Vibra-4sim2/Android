@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -19,22 +20,19 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import com.example.dam.R
 import com.example.dam.ui.theme.*
 import com.example.dam.utils.UserPreferences
+import com.example.dam.utils.UserAvatar
 import com.example.dam.viewmodel.UserProfileViewModel
-import com.example.dam.viewmodel.UserViewModel        // ← This is the one that has uploadAvatar
-import androidx.lifecycle.ViewModelProvider
+import com.example.dam.viewmodel.UserViewModel
 
 @Composable
 fun ProfileScreen(
@@ -91,7 +89,16 @@ fun ProfileScreen(
     // Load current user profile + sorties + publications
     LaunchedEffect(userId, token) {
         if (userId.isNotEmpty() && token.isNotEmpty()) {
+            android.util.Log.d("ProfileScreen", "🔄 Loading profile for userId: $userId")
             profileViewModel.loadUserProfile(userId, token)
+        }
+    }
+
+    // Debug: Monitor publications state
+    LaunchedEffect(publications) {
+        android.util.Log.d("ProfileScreen", "📊 Publications state changed: ${publications.size} items")
+        publications.forEachIndexed { index, pub ->
+            android.util.Log.d("ProfileScreen", "  Pub #${index + 1}: ${pub.content.take(30)}...")
         }
     }
 
@@ -148,24 +155,32 @@ fun ProfileScreen(
                         sorties.forEach { sortie ->
                             ModernEventCard(
                                 sortie = sortie,
+                                token = token,
                                 onClick = { navController.navigate("sortieDetail/${sortie.id}") }
                             )
                         }
                     }
                 }
             } else {
+                android.util.Log.d("ProfileScreen", "📖 Tab 1 selected - Publications tab")
+                android.util.Log.d("ProfileScreen", "Publications list size: ${publications.size}")
+                android.util.Log.d("ProfileScreen", "Publications isEmpty: ${publications.isEmpty()}")
+
                 if (publications.isEmpty()) {
+                    android.util.Log.d("ProfileScreen", "❌ No publications - showing empty state")
                     EmptyContentState(
                         icon = Icons.Default.PhotoLibrary,
                         title = "Aucune publication",
                         subtitle = "Partagez vos moments ici"
                     )
                 } else {
+                    android.util.Log.d("ProfileScreen", "✅ Displaying ${publications.size} publications")
                     Column(
                         modifier = Modifier.padding(horizontal = 20.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         publications.forEach { publication ->
+                            android.util.Log.d("ProfileScreen", "  Rendering publication: ${publication.id}")
                             PublicationCard(
                                 publication = publication,
                                 isLiked = profileViewModel.isLikedByCurrentUser(publication),
@@ -204,26 +219,11 @@ fun ProfileHeaderNew(
                     .border(3.dp, GreenAccent, CircleShape)
                     .background(CardDark)
             ) {
-                if (!avatarUrl.isNullOrEmpty()) {
-                    AsyncImage(
-                        model = ImageRequest.Builder(LocalContext.current)
-                            .data(avatarUrl)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = "Profile Picture",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop,
-                        error = painterResource(R.drawable.homme),
-                        placeholder = painterResource(R.drawable.homme)
-                    )
-                } else {
-                    Image(
-                        painter = painterResource(R.drawable.homme),
-                        contentDescription = "Default",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                }
+                UserAvatar(
+                    avatarUrl = avatarUrl,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
             }
             Box(
                 modifier = Modifier.size(32.dp).align(Alignment.BottomEnd)
@@ -292,26 +292,81 @@ fun StatItem(count: Int, label: String) {
 
 @Composable
 fun ActionButtons(navController: NavHostController) {
-    Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        Button(
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Modern Edit Profile Button
+        Surface(
             onClick = { navController.navigate("edit_profile") },
             modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = CardDark),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(16.dp),
+            color = CardGlass,
+            shadowElevation = 4.dp,
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, GreenAccent.copy(alpha = 0.3f))
         ) {
-            Icon(Icons.Default.Edit, null, tint = GreenAccent, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Edit profil", color = TextPrimary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(
+                                GreenAccent.copy(alpha = 0.1f),
+                                TealAccent.copy(alpha = 0.05f)
+                            )
+                        )
+                    )
+                    .padding(vertical = 14.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = "Edit Profile",
+                    tint = GreenAccent,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Edit Profile",
+                    color = GreenAccent,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
-        Button(
-            onClick = { /* Share */ },
+
+        // Modern Share Button
+        Surface(
+            onClick = { /* Share logic */ },
             modifier = Modifier.weight(1f),
-            colors = ButtonDefaults.buttonColors(containerColor = GreenAccent),
-            shape = RoundedCornerShape(12.dp)
+            shape = RoundedCornerShape(16.dp),
+            color = GreenAccent,
+            shadowElevation = 4.dp
         ) {
-            Icon(Icons.Default.Share, null, tint = Color.White, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text("Share profil", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 14.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    Icons.Default.Share,
+                    contentDescription = "Share",
+                    tint = Color.White,
+                    modifier = Modifier.size(20.dp)
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Share",
+                    color = Color.White,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
         }
     }
 }
@@ -363,3 +418,5 @@ fun EmptyContentState(icon: androidx.compose.ui.graphics.vector.ImageVector, tit
         }
     }
 }
+
+

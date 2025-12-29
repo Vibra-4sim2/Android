@@ -135,6 +135,7 @@ data class MessageUI(
     val id: String,
     val author: String,
     val authorAvatar: String?,
+    val senderId: String? = null, // ✅ User ID of message sender (for navigation)
     val content: String?,
     val imageUrl: String?,
     val videoUrl: String?,
@@ -209,6 +210,7 @@ fun MessageResponse.toMessageUI(currentUserId: String?): MessageUI {
         id = this._id,
         author = author,
         authorAvatar = avatar,
+        senderId = actualSenderId, // ✅ Store sender ID for navigation
         content = this.content,
         imageUrl = this.imageUrl ?: this.mediaUrl,
         videoUrl = this.videoUrl,

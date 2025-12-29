@@ -37,14 +37,32 @@ fun MessagesListScreen(
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
 
+    // ✅ ADD: Search functionality
+    var searchQuery by remember { mutableStateOf("") }
+
     // États du ViewModel
     val chatGroups by viewModel.chatGroups.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val errorMessage by viewModel.errorMessage.collectAsState()
 
-    // ✅ Initialize ChatStateManager with context
+    // ✅ Filter chats based on search query
+    val filteredChatGroups = remember(chatGroups, searchQuery) {
+        if (searchQuery.isBlank()) {
+            chatGroups
+        } else {
+            chatGroups.filter { chat ->
+                // Search by chat name
+                chat.name.contains(searchQuery, ignoreCase = true) ||
+                // Search by last message author
+                chat.lastMessageAuthor.contains(searchQuery, ignoreCase = true)
+            }
+        }
+    }
+
+    // ✅ Initialize ChatStateManager and ReadMessagesManager
     LaunchedEffect(Unit) {
         ChatStateManager.initialize(context)
+        com.example.dam.utils.ReadMessagesManager.initialize(context)
         viewModel.loadUserChats(context)
     }
 
@@ -120,7 +138,7 @@ fun MessagesListScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // Search Bar
+                    // ✅ Interactive Search Bar
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp),
@@ -130,21 +148,56 @@ fun MessagesListScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                .padding(horizontal = 16.dp, vertical = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Icon(
                                 Icons.Default.Search,
                                 contentDescription = "Search",
-                                tint = TextSecondary,
+                                tint = if (searchQuery.isNotEmpty()) GreenAccent else TextSecondary,
                                 modifier = Modifier.size(20.dp)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Rechercher une conversation...",
-                                color = TextSecondary,
-                                fontSize = 14.sp
+
+                            // ✅ TextField for search input
+                            TextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                placeholder = {
+                                    Text(
+                                        text = "Rechercher une conversation...",
+                                        color = TextSecondary,
+                                        fontSize = 14.sp
+                                    )
+                                },
+                                colors = TextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                    focusedIndicatorColor = Color.Transparent,
+                                    unfocusedIndicatorColor = Color.Transparent,
+                                    focusedTextColor = TextPrimary,
+                                    unfocusedTextColor = TextPrimary,
+                                    cursorColor = GreenAccent
+                                ),
+                                modifier = Modifier.weight(1f),
+                                singleLine = true
                             )
+
+                            // ✅ Clear button when text is entered
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(
+                                    onClick = { searchQuery = "" },
+                                    modifier = Modifier.size(24.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Close,
+                                        contentDescription = "Clear",
+                                        tint = TextSecondary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                            }
                         }
                     }
 
@@ -185,13 +238,15 @@ fun MessagesListScreen(
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.Medium
                                 )
-                                if (chatGroups.isNotEmpty()) {
+                                // ✅ Show total UNREAD count, not total chats count
+                                val totalUnreadCount = chatGroups.sumOf { it.unreadCount }
+                                if (totalUnreadCount > 0) {
                                     Surface(
                                         shape = CircleShape,
                                         color = ErrorRed
                                     ) {
                                         Text(
-                                            text = chatGroups.size.toString(),
+                                            text = if (totalUnreadCount > 99) "99+" else totalUnreadCount.toString(),
                                             color = Color.White,
                                             fontSize = 11.sp,
                                             fontWeight = FontWeight.Bold,
@@ -313,7 +368,34 @@ fun MessagesListScreen(
                             )
                         }
                     }
-                    // Liste des chats
+                    // ✅ Show "No results" if search has no matches
+                    filteredChatGroups.isEmpty() && searchQuery.isNotEmpty() -> {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = 40.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                Icons.Default.SearchOff,
+                                contentDescription = "No results",
+                                tint = TextTertiary,
+                                modifier = Modifier.size(64.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Aucun résultat",
+                                color = TextSecondary,
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                text = "Aucune discussion ne correspond à \"$searchQuery\"",
+                                color = TextTertiary,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                    // ✅ Liste des chats filtrés
                     else -> {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
@@ -321,12 +403,15 @@ fun MessagesListScreen(
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             items(
-                                items = chatGroups,
+                                items = filteredChatGroups, // ✅ Use filtered list
                                 key = { group -> group.sortieId }
                             ) { group ->
                                 GroupChatItem(
                                     group = group,
                                     onClick = {
+                                        // ✅ Mark chat as read immediately when clicked
+                                        com.example.dam.utils.ReadMessagesManager.markChatAsRead(context, group.sortieId)
+
                                         // Navigate to chat conversation
                                         val encodedGroupName = java.net.URLEncoder.encode(group.name, "UTF-8")
                                         val encodedEmoji = java.net.URLEncoder.encode(group.emoji, "UTF-8")
@@ -343,21 +428,7 @@ fun MessagesListScreen(
             }
         }
 
-        // Floating Action Button
-        FloatingActionButton(
-            onClick = { /* New message */ },
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(bottom = 96.dp, end = 20.dp),
-            containerColor = GreenAccent,
-            shape = CircleShape
-        ) {
-            Icon(
-                Icons.Default.Send,
-                contentDescription = "New message",
-                tint = Color.White
-            )
-        }
+        // ✅ REMOVED: Floating Action Button (user doesn't need it)
     }
 }
 
@@ -387,23 +458,21 @@ fun GroupChatItem(group: ChatGroupUI, onClick: () -> Unit) {
         group.timestamp?.let { com.example.dam.models.formatTime(it) } ?: group.time
     }
 
-    // ✅ OPTIMISTIC BADGE HIDING: Use ChatStateManager to hide badges while viewing
-    val recentlyOpenedChats by ChatStateManager.recentlyOpenedChats.collectAsState()
-    val isChatCurrentlyViewing = recentlyOpenedChats.contains(group.sortieId)
+    // ✅ PERSISTENT BADGE LOGIC: Show badge based on ReadMessagesManager
+    // This persists across app restarts and chat navigation
+    val readChatIds by com.example.dam.utils.ReadMessagesManager.readChatIds.collectAsState()
+    val isChatRead = readChatIds.contains(group.sortieId)
 
-    // FIXED LOGIC:
-    // - If chat is currently being viewed (in ChatConversation screen), hide badge
-    // - Otherwise, show badge based on backend's unreadCount
-    // - When user leaves chat, it's removed from recentlyOpenedChats, so badge can reappear
-    val effectiveUnreadCount = if (isChatCurrentlyViewing) {
-        0  // Hide badge while actively viewing this chat
+    // Show badge if there's an unread message (group.unreadCount > 0) AND chat hasn't been read
+    val effectiveUnreadCount = if (group.unreadCount > 0 && !isChatRead) {
+        group.unreadCount
     } else {
-        group.unreadCount  // Show badge based on actual unread count
+        0
     }
 
     // ✅ Log for debugging
-    LaunchedEffect(group.unreadCount, isChatCurrentlyViewing) {
-        android.util.Log.d("GroupChatItem", "[${group.sortieId.take(8)}] 📊 Badge=$effectiveUnreadCount (backend=${group.unreadCount}, viewing=$isChatCurrentlyViewing)")
+    LaunchedEffect(group.unreadCount, isChatRead) {
+        android.util.Log.d("GroupChatItem", "[${group.sortieId.take(8)}] 📊 Badge=$effectiveUnreadCount (backend=${group.unreadCount}, read=$isChatRead)")
     }
 
 

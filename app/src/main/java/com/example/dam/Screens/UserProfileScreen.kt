@@ -42,6 +42,7 @@ import com.example.dam.models.SortieRatingData
 import com.example.dam.remote.RetrofitInstance
 import com.example.dam.ui.theme.*
 import com.example.dam.utils.UserPreferences
+import com.example.dam.utils.UserAvatar
 import com.example.dam.viewmodel.HomeExploreViewModel
 import com.example.dam.viewmodel.RatingViewModel
 import com.example.dam.viewmodel.UserProfileViewModel
@@ -204,6 +205,7 @@ fun UserProfileScreen(
                                 items(sorties.filterNotNull()) { sortie ->
                                     ModernEventCard(
                                         sortie = sortie,
+                                        token = token,
                                         onClick = { navController.navigate("sortieDetail/${sortie.id}") }
                                     )
                                     Spacer(modifier = Modifier.height(16.dp))
@@ -413,13 +415,16 @@ fun UserProfileHeader(
                 .border(3.dp, GreenAccent, CircleShape)
                 .background(CardDark)
         ) {
-            AsyncImage(
-                model = avatarUrl ?: "",
-                contentDescription = "Profile Picture",
+            // Debug logging
+            Log.d("UserProfile", "═══════════════════════════════════")
+            Log.d("UserProfile", "User Name: $userName")
+            Log.d("UserProfile", "Avatar URL: $avatarUrl")
+            Log.d("UserProfile", "═══════════════════════════════════")
+
+            UserAvatar(
+                avatarUrl = avatarUrl,
                 modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                error = painterResource(id = R.drawable.homme),
-                placeholder = painterResource(id = R.drawable.homme)
+                contentScale = ContentScale.Crop
             )
         }
 

@@ -191,14 +191,38 @@ class AdventureRepository {
 
     suspend fun getAllSorties(): Result<List<SortieResponse>> = withContext(Dispatchers.IO) {
         try {
+            Log.d("GET_SORTIES", "🔄 Fetching sorties from API...")
             val response = api.getAllSorties()
+
             if (response.isSuccessful && response.body() != null) {
-                Result.Success(response.body()!!)
+                val sorties = response.body()!!
+                Log.d("GET_SORTIES", "✅ Got ${sorties.size} sorties from API")
+
+                // Log avatar info for each sortie
+                sorties.forEachIndexed { index, sortie ->
+                    Log.d("GET_SORTIES", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    Log.d("GET_SORTIES", "Sortie #${index + 1}: ${sortie.titre}")
+                    Log.d("GET_SORTIES", "  Creator ID: ${sortie.createurId.id}")
+                    Log.d("GET_SORTIES", "  Creator Email: ${sortie.createurId.email}")
+                    Log.d("GET_SORTIES", "  Creator Name: ${sortie.createurId.firstName} ${sortie.createurId.lastName}")
+                    Log.d("GET_SORTIES", "  ⚠️ Creator Avatar: ${sortie.createurId.avatar}")
+                    Log.d("GET_SORTIES", "  Avatar is null? ${sortie.createurId.avatar == null}")
+                    Log.d("GET_SORTIES", "  Avatar is empty? ${sortie.createurId.avatar?.isEmpty()}")
+                    if (sortie.createurId.avatar != null) {
+                        Log.d("GET_SORTIES", "  ✅ Avatar URL present: ${sortie.createurId.avatar}")
+                    } else {
+                        Log.e("GET_SORTIES", "  ❌ NO AVATAR - Backend didn't send avatar!")
+                    }
+                    Log.d("GET_SORTIES", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                }
+
+                Result.Success(sorties)
             } else {
+                Log.e("GET_SORTIES", "❌ API Error: ${response.code()} - ${response.message()}")
                 Result.Error("Erreur ${response.code()}: ${response.message()}")
             }
         } catch (e: Exception) {
-            Log.e("GET_SORTIES", "Exception: ${e.message}", e)
+            Log.e("GET_SORTIES", "❌ Exception: ${e.message}", e)
             Result.Error("Erreur réseau: ${e.message}")
         }
     }

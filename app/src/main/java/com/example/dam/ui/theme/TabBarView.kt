@@ -509,20 +509,17 @@ fun TabBarView(
 
                         Log.d("TabBarView", "🔘 Tab clicked: index=$index, route=$route, currentRoute=$currentRoute")
 
-                        // Naviguer uniquement si la route est différente
-                        if (currentRoute != route) {
-                            Log.d("TabBarView", "➡️ Navigating from $currentRoute to $route")
-                            internalNavController.navigate(route) {
-                                // Nettoyer le backstack jusqu'à home
-                                popUpTo("home") {
-                                    saveState = true
-                                    inclusive = (route == "home") // Si on va à home, l'inclure pour le remplacer
-                                }
-                                launchSingleTop = true
-                                restoreState = true
+                        // ✅ FIX: Always navigate, even if on same route (clears back stack)
+                        Log.d("TabBarView", "➡️ Navigating to $route")
+                        internalNavController.navigate(route) {
+                            // Pop up to the start destination and save state
+                            popUpTo(internalNavController.graph.startDestinationId) {
+                                saveState = true
                             }
-                        } else {
-                            Log.d("TabBarView", "⏸️ Already on $route, not navigating")
+                            // Avoid multiple copies of the same destination
+                            launchSingleTop = true
+                            // Restore state when reselecting a previously selected item
+                            restoreState = true
                         }
                     }
                 )

@@ -39,6 +39,19 @@ class HomeExploreViewModel : ViewModel() {
                 is Result.Success -> {
                     sorties = result.data
                     Log.d("HOME_EXPLORE", "Loaded ${sorties.size} sorties")
+
+                    // Debug: Log avatar info for each sortie
+                    sorties.forEach { sortie ->
+                        Log.d("HOME_EXPLORE", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                        Log.d("HOME_EXPLORE", "Sortie: ${sortie.titre}")
+                        Log.d("HOME_EXPLORE", "Creator ID: ${sortie.createurId.id}")
+                        Log.d("HOME_EXPLORE", "Creator Name: ${sortie.createurId.firstName} ${sortie.createurId.lastName}")
+                        Log.d("HOME_EXPLORE", "Creator Email: ${sortie.createurId.email}")
+                        Log.d("HOME_EXPLORE", "Creator Avatar: ${sortie.createurId.avatar}")
+                        Log.d("HOME_EXPLORE", "Avatar is null? ${sortie.createurId.avatar == null}")
+                        Log.d("HOME_EXPLORE", "Avatar is empty? ${sortie.createurId.avatar?.isEmpty()}")
+                        Log.d("HOME_EXPLORE", "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+                    }
                 }
                 is Result.Error -> {
                     errorMessage = result.message

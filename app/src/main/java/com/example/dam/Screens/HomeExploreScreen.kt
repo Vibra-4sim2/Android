@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.speech.RecognizerIntent
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -40,11 +41,12 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
-import coil.request.ImageRequest
 import com.example.dam.R
 import com.example.dam.models.SortieResponse
 import com.example.dam.ui.theme.*
 import com.example.dam.utils.UserPreferences
+import com.example.dam.utils.UserAvatar
+import com.example.dam.utils.AvatarCache
 import com.example.dam.viewmodel.HomeExploreViewModel
 import com.example.dam.viewmodel.UserProfileViewModel
 import com.example.dam.viewmodel.SavedSortiesViewModel
@@ -359,6 +361,7 @@ fun HomeExploreScreen(
                                 val isSaved = sortie.id in savedSortieIds
                                 ModernEventCard(
                                     sortie = sortie,
+                                    token = token,
                                     isFollowingCreator = sortie.createurId.id in followingIds,
                                     onClick = { navController.navigate("sortieDetail/${sortie.id}") },
                                     onUserClick = { navController.navigate("userProfile/${sortie.createurId.id}") },
@@ -393,6 +396,7 @@ fun HomeExploreScreen(
 @Composable
 fun ModernEventCard(
     sortie: SortieResponse,
+    token: String,
     isFollowingCreator: Boolean = false,
     onClick: () -> Unit,
     onUserClick: ((String) -> Unit)? = null,
@@ -577,40 +581,36 @@ fun ModernEventCard(
                                 .size(44.dp)
                                 .clip(CircleShape)
                                 .border(2.dp, GreenAccent.copy(0.5f), CircleShape)
-                                .background(
-                                    Brush.linearGradient(
-                                        listOf(
-                                            GreenAccent,
-                                            TealAccent
-                                        )
-                                    )
-                                )
+                                .background(CardDark)
                                 .clickable {
                                     onUserClick?.invoke(sortie.createurId.id)
                                 },
                             contentAlignment = Alignment.Center
                         ) {
-                            val avatar = sortie.createurId.avatar
-                            if (avatar?.isNotEmpty() == true) {
-                                AsyncImage(
-                                    model = ImageRequest.Builder(context).data(avatar)
-                                        .crossfade(true).build(),
-                                    contentDescription = "Avatar",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop,
-                                    error = painterResource(R.drawable.homme),
-                                    placeholder = painterResource(R.drawable.homme)
-                                )
-                            } else {
-                                Text(
-                                    text = sortie.createurId.email.firstOrNull()?.uppercaseChar()
-                                        ?.toString() ?: "?",
-                                    color = Color.White,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            // ✅ FETCH AVATAR FROM USER PROFILE (not from sortie)
+                            val creatorAvatarUrl = remember(sortie.createurId.id) {
+                                mutableStateOf<String?>(null)
                             }
 
+                            // Fetch avatar from user profile when card is displayed
+                            LaunchedEffect(sortie.createurId.id) {
+                                Log.d("HomeExplore", "🔄 Fetching avatar for user ${sortie.createurId.id}")
+                                val avatar = AvatarCache.getAvatarForUser(
+                                    userId = sortie.createurId.id,
+                                    token = token
+                                )
+                                creatorAvatarUrl.value = avatar
+                                Log.d("HomeExplore", "✅ Got avatar: $avatar")
+                            }
+
+                            // Display the fetched avatar
+                            UserAvatar(
+                                avatarUrl = creatorAvatarUrl.value,
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+
+                            // Following badge
                             if (isFollowingCreator) {
                                 Box(
                                     modifier = Modifier

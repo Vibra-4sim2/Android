@@ -3,6 +3,8 @@ package com.example.dam.Screens
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -243,6 +245,10 @@ fun ChatConversationScreen(
         // ✅ MARK CHAT AS OPENED - This will hide the badge instantly
         ChatStateManager.markChatAsOpened(sortieId)
         android.util.Log.d("ChatConversationScreen", "✅ Chat marked as opened in ChatStateManager")
+
+        // ✅ MARK AS READ in ReadMessagesManager for persistent badge state
+        com.example.dam.utils.ReadMessagesManager.markChatAsRead(context, sortieId)
+        android.util.Log.d("ChatConversationScreen", "✅ Chat marked as read in ReadMessagesManager")
 
         // ✅ Initialiser le contexte du ViewModel pour les WebSockets
         viewModel.setApplicationContext(context)
@@ -557,7 +563,7 @@ fun ChatConversationScreen(
                                 when (item.type) {
                                     "message" -> {
                                         item.messageUI?.let { msg ->
-                                            ChatMessageBubble(msg)
+                                            ChatMessageBubble(msg, navController)
                                         }
                                     }
                                     "poll" -> {
@@ -893,27 +899,58 @@ fun ChatConversationScreen(
 }
 
 @Composable
-fun ChatMessageBubble(message: MessageUI) {
+fun ChatMessageBubble(
+    message: MessageUI,
+    navController: NavHostController
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = if (message.isMe) Arrangement.End else Arrangement.Start
     ) {
         if (!message.isMe) {
-            // Avatar for other users
+            // ✅ Avatar for other users - CLICKABLE to navigate to profile
             if (message.authorAvatar != null) {
                 AsyncImage(
                     model = message.authorAvatar,
                     contentDescription = "Avatar",
                     modifier = Modifier
                         .size(32.dp)
-                        .clip(CircleShape),
+                        .clip(CircleShape)
+                        .clickable {
+                            // ✅ Navigate to user profile when avatar is clicked
+                            message.senderId?.let { senderId ->
+                                android.util.Log.d("ChatBubble", "🔄 Navigating to profile: $senderId")
+                                try {
+                                    // Navigate to the user's profile screen
+                                    navController.navigate("userProfile/$senderId") {
+                                        launchSingleTop = true
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ChatBubble", "❌ Navigation error: ${e.message}")
+                                }
+                            }
+                        },
                     contentScale = ContentScale.Crop
                 )
             } else {
                 Box(
                     modifier = Modifier
                         .size(32.dp)
-                        .background(Color(0xFFdc4e41), CircleShape),
+                        .background(Color(0xFFdc4e41), CircleShape)
+                        .clickable {
+                            // ✅ Navigate to user profile when avatar is clicked
+                            message.senderId?.let { senderId ->
+                                android.util.Log.d("ChatBubble", "🔄 Navigating to profile: $senderId")
+                                try {
+                                    // Navigate to the user's profile screen
+                                    navController.navigate("userProfile/$senderId") {
+                                        launchSingleTop = true
+                                    }
+                                } catch (e: Exception) {
+                                    android.util.Log.e("ChatBubble", "❌ Navigation error: ${e.message}")
+                                }
+                            }
+                        },
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -982,8 +1019,28 @@ fun ChatMessageBubble(message: MessageUI) {
                         )
                     }
 
+                    // ✅ SHARED SORTIE CARD - Check if message contains shared sortie
+                    val isSharedSortie = message.content?.startsWith("SHARED_SORTIE:") == true
+
+                    // DEBUG LOGGING
+                    if (message.content != null) {
+                        android.util.Log.d("ChatCard", "========================================")
+                        android.util.Log.d("ChatCard", "Message ID: ${message.id}")
+                        android.util.Log.d("ChatCard", "Message content preview: ${message.content.take(100)}")
+                        android.util.Log.d("ChatCard", "Starts with SHARED_SORTIE: $isSharedSortie")
+                        android.util.Log.d("ChatCard", "========================================")
+                    }
+
+                    if (isSharedSortie && message.content != null) {
+                        SharedSortieCard(
+                            messageContent = message.content,
+                            navController = navController,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+
                     // Text content
-                    if (!message.content.isNullOrEmpty() && message.type != MessageType.AUDIO) {
+                    if (!message.content.isNullOrEmpty() && message.type != MessageType.AUDIO && !isSharedSortie) {
                         Row(
                             modifier = Modifier.padding(
                                 start = 12.dp,
@@ -1172,3 +1229,158 @@ fun AttachmentOption(
         )
     }
 }
+
+// ✅ Shared Sortie Card Component
+@Composable
+fun SharedSortieCard(
+    messageContent: String,
+    navController: NavHostController,
+    modifier: Modifier = Modifier
+) {
+    // Parse the shared sortie data
+    val lines = messageContent.split("\n")
+    val sortieId = lines.find { it.startsWith("SHARED_SORTIE:") }?.substringAfter(":")?.trim() ?: ""
+    val title = lines.find { it.startsWith("TITLE:") }?.substringAfter(":")?.trim() ?: "Sortie partagée"
+    val creator = lines.find { it.startsWith("CREATOR:") }?.substringAfter(":")?.trim() ?: "Utilisateur"
+    val imageUrl = lines.find { it.startsWith("IMAGE:") }?.substringAfter(":")?.trim() ?: ""
+    val type = lines.find { it.startsWith("TYPE:") }?.substringAfter(":")?.trim() ?: ""
+
+    android.util.Log.d("SharedSortieCard", "🔗 Sortie ID to navigate: $sortieId")
+
+    Surface(
+        onClick = {
+            if (sortieId.isNotEmpty()) {
+                android.util.Log.d("SharedSortieCard", "📍 Navigating to: sortieDetail/$sortieId")
+                try {
+                    // Navigate to sortie detail screen
+                    navController.navigate("sortieDetail/$sortieId") {
+                        launchSingleTop = true
+                        // Avoid putting the same destination multiple times on the back stack
+                        popUpTo(navController.graph.startDestinationId) {
+                            saveState = true
+                        }
+                        restoreState = true
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("SharedSortieCard", "❌ Navigation error: ${e.message}", e)
+                }
+            } else {
+                android.util.Log.e("SharedSortieCard", "❌ Empty sortie ID, cannot navigate")
+            }
+        },
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+        color = Color(0xFF2d4a3e).copy(alpha = 0.3f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF4ADE80).copy(alpha = 0.3f)),
+        shadowElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFF1a3a2e).copy(alpha = 0.9f),
+                            Color(0xFF1a3a2e).copy(alpha = 0.7f)
+                        )
+                    )
+                )
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Sortie Image
+            if (imageUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = "Sortie image",
+                    modifier = Modifier
+                        .size(70.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1a3a2e)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(70.dp)
+                        .background(Color(0xFF4ADE80).copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = when (type) {
+                            "VELO" -> Icons.Default.DirectionsBike
+                            "RANDONNEE" -> Icons.Default.Hiking
+                            else -> Icons.Default.Explore
+                        },
+                        contentDescription = null,
+                        tint = Color(0xFF4ADE80),
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+
+            // Sortie Info
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Shared indicator
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = null,
+                        tint = Color(0xFF4ADE80),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Sortie partagée",
+                        color = Color(0xFF4ADE80),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Title
+                Text(
+                    text = title,
+                    color = Color.White,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1,
+                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                )
+
+                // Creator
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = creator,
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            // Arrow indicator
+            Icon(
+                imageVector = Icons.Default.ArrowForward,
+                contentDescription = "View",
+                tint = Color(0xFF4ADE80),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+

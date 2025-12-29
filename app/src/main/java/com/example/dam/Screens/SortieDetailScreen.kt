@@ -5,7 +5,9 @@ import android.util.Log
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -33,6 +35,8 @@ import com.example.dam.NavigationRoutes
 import com.example.dam.R
 import com.example.dam.models.SortieResponse
 import com.example.dam.ui.theme.*
+import com.example.dam.utils.AvatarCache
+import com.example.dam.utils.UserAvatar
 import com.example.dam.viewmodel.ParticipationViewModel
 import com.example.dam.viewmodel.SortieDetailViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -67,13 +71,28 @@ fun SortieDetailScreen(
     val token = sharedPref.getString("access_token", "") ?: ""
     val currentUserId = sharedPref.getString("user_id", "") ?: ""
 
+    // ✅ ADD: SavedSortiesViewModel for save functionality
+    val savedSortiesViewModel: com.example.dam.viewmodel.SavedSortiesViewModel = viewModel()
+
     val hasJoined by participationViewModel.hasJoined.collectAsState()
     val successMessage by participationViewModel.successMessage.collectAsState()
     val errorMessage by participationViewModel.errorMessage.collectAsState()
 
+    // ✅ ADD: Track saved state
+    var isSaved by remember { mutableStateOf(false) }
+    var showShareDialog by remember { mutableStateOf(false) }
+
     LaunchedEffect(sortieId) {
         viewModel.loadSortieDetail(sortieId)
         participationViewModel.loadParticipations(sortieId)
+        // ✅ Initialize and check if sortie is saved
+        savedSortiesViewModel.initialize(context)
+        isSaved = savedSortiesViewModel.isSortieSaved(sortieId)
+    }
+
+    // ✅ Observe saved state changes
+    LaunchedEffect(savedSortiesViewModel.savedSortieIds.collectAsState().value) {
+        isSaved = savedSortiesViewModel.isSortieSaved(sortieId)
     }
 
     // Check if user has joined
@@ -152,16 +171,41 @@ fun SortieDetailScreen(
             viewModel.sortie != null -> {
                 SortieDetailContent(
                     sortie = viewModel.sortie!!,
+                    token = token,
                     hasJoined = hasJoined,
                     isCreator = viewModel.sortie!!.createurId.id == currentUserId,
+                    isSaved = isSaved,
                     onBackClick = { navController.popBackStack() },
                     onJoinClick = {
                         participationViewModel.joinSortie(sortieId, token)
                     },
                     onManageRequestsClick = {
                         navController.navigate(NavigationRoutes.participationRequestsRoute(sortieId))
-                    }
+                    },
+                    onSaveClick = {
+                        if (isSaved) {
+                            savedSortiesViewModel.removeSavedSortie(context, sortieId)
+                            android.widget.Toast.makeText(context, "Sortie retirée des favoris", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.sortie?.let { sortie ->
+                                savedSortiesViewModel.saveSortie(context, sortie)
+                                android.widget.Toast.makeText(context, "Sortie sauvegardée ✅", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    onShareClick = {
+                        showShareDialog = true
+                    },
+                    navController = navController
                 )
+
+                // ✅ Share Dialog
+                if (showShareDialog) {
+                    ShareSortieDialog(
+                        sortie = viewModel.sortie!!,
+                        onDismiss = { showShareDialog = false }
+                    )
+                }
             }
         }
     }
@@ -171,11 +215,16 @@ fun SortieDetailScreen(
 @Composable
 fun SortieDetailContent(
     sortie: SortieResponse,
+    token: String,
     hasJoined: Boolean = false,
     isCreator: Boolean = false,
+    isSaved: Boolean = false,
     onBackClick: () -> Unit,
     onJoinClick: () -> Unit = {},
-    onManageRequestsClick: () -> Unit = {}
+    onManageRequestsClick: () -> Unit = {},
+    onSaveClick: () -> Unit = {},
+    onShareClick: () -> Unit = {},
+    navController: NavController
 ) {
     fun formatDate(dateString: String): String {
         return try {
@@ -279,7 +328,7 @@ fun SortieDetailContent(
 
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     IconButton(
-                        onClick = { /* Share */ },
+                        onClick = onShareClick,
                         modifier = Modifier
                             .size(40.dp)
                             .background(Color.Black.copy(alpha = 0.5f), CircleShape)
@@ -292,15 +341,15 @@ fun SortieDetailContent(
                     }
 
                     IconButton(
-                        onClick = { /* Bookmark */ },
+                        onClick = onSaveClick,
                         modifier = Modifier
                             .size(40.dp)
                             .background(Color.Black.copy(alpha = 0.5f), CircleShape)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.BookmarkBorder,
-                            contentDescription = "Bookmark",
-                            tint = Color.White
+                            imageVector = if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = if (isSaved) "Saved" else "Save",
+                            tint = if (isSaved) GreenAccent else Color.White
                         )
                     }
                 }
@@ -391,22 +440,38 @@ fun SortieDetailContent(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // ✅ Fetch avatar from user profile (same as HomeExploreScreen)
+                    val creatorAvatarUrl = remember(sortie.createurId.id) {
+                        mutableStateOf<String?>(null)
+                    }
+
+                    LaunchedEffect(sortie.createurId.id) {
+                        Log.d("SortieDetail", "🔄 Fetching avatar for creator ${sortie.createurId.id}")
+                        val avatar = AvatarCache.getAvatarForUser(
+                            userId = sortie.createurId.id,
+                            token = token
+                        )
+                        creatorAvatarUrl.value = avatar
+                        Log.d("SortieDetail", "✅ Got avatar: $avatar")
+                    }
+
                     Box(
                         modifier = Modifier
                             .size(50.dp)
                             .clip(CircleShape)
-                            .background(
-                                Brush.linearGradient(
-                                    colors = listOf(GreenAccent, TealAccent)
-                                )
-                            ),
+                            .border(2.dp, GreenAccent, CircleShape)
+                            .background(CardDark)
+                            .clickable {
+                                // Navigate to creator's profile
+                                navController.navigate("userProfile/${sortie.createurId.id}")
+                            },
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text = sortie.createurId.email.take(1).uppercase(),
-                            color = Color.White,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
+                        // Display the fetched avatar
+                        UserAvatar(
+                            avatarUrl = creatorAvatarUrl.value,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
                         )
                     }
 
@@ -1012,3 +1077,182 @@ fun LegendItem(color: androidx.compose.ui.graphics.Color, label: String) {
         )
     }
 }
+
+// ✅ Share Sortie Dialog - Share to discussions as card
+@Composable
+fun ShareSortieDialog(
+    sortie: SortieResponse,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+
+    // Get user's discussions via MessagesViewModel
+    val messagesViewModel = remember { com.example.dam.viewmodel.MessagesViewModel() }
+    val chatGroups by messagesViewModel.chatGroups.collectAsState()
+
+    LaunchedEffect(Unit) {
+        messagesViewModel.loadUserChats(context)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = null,
+                    tint = GreenAccent
+                )
+                Text(
+                    "Partager dans une discussion",
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Sélectionnez une discussion:",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+
+                if (chatGroups.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = GreenAccent,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Text(
+                                "Chargement...",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(chatGroups.size) { index ->
+                            val chatGroup = chatGroups[index]
+                            DiscussionCard(
+                                sortieName = chatGroup.name,
+                                sortieEmoji = chatGroup.emoji,
+                                onClick = {
+                                    // Create structured share message with sortie data
+                                    val chatViewModel = com.example.dam.viewmodel.ChatViewModel()
+                                    val shareMessage = "SHARED_SORTIE:${sortie.id}\nTITLE:${sortie.titre}\nCREATOR:${sortie.createurId.firstName ?: ""} ${sortie.createurId.lastName ?: ""}\nIMAGE:${sortie.photo ?: ""}\nDATE:${sortie.date}\nTYPE:${sortie.type}"
+
+                                    // Debug log
+                                    android.util.Log.d("ShareSortie", "========================================")
+                                    android.util.Log.d("ShareSortie", "📤 Sharing sortie to chat: ${chatGroup.name}")
+                                    android.util.Log.d("ShareSortie", "Message to send:")
+                                    android.util.Log.d("ShareSortie", shareMessage)
+                                    android.util.Log.d("ShareSortie", "========================================")
+
+                                    // Send to chat
+                                    chatViewModel.sendTextMessage(chatGroup.sortieId, shareMessage, context)
+
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Sortie partagée dans ${chatGroup.name}",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                    onDismiss()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Annuler", color = TextSecondary)
+            }
+        },
+        containerColor = CardDark,
+        titleContentColor = TextPrimary,
+        textContentColor = TextSecondary,
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+@Composable
+fun DiscussionCard(
+    sortieName: String,
+    sortieEmoji: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = CardGlass,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardDark.copy(alpha = 0.4f))
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(GreenAccent.copy(alpha = 0.2f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = sortieEmoji,
+                    fontSize = 20.sp
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = sortieName,
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                Text(
+                    text = "Discussion de groupe",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.Send,
+                contentDescription = "Share",
+                tint = GreenAccent,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+

@@ -1,7 +1,6 @@
 package com.example.dam.Screens
 
 import android.app.Application
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,7 +18,6 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -37,6 +35,7 @@ import coil.compose.AsyncImage
 import com.example.dam.models.PublicationResponse
 import com.example.dam.models.fullName
 import com.example.dam.models.hasImage
+import com.example.dam.utils.UserAvatarWithInitials
 import com.example.dam.viewmodel.FeedViewModel
 import com.example.dam.viewmodel.FeedUiState
 import java.text.SimpleDateFormat
@@ -347,37 +346,14 @@ fun PostCard(
                                 .border(2.dp, GreenAccent.copy(alpha = 0.3f), CircleShape)
                                 .padding(3.dp)
                         ) {
-                            if (publication.author?.avatar.isNullOrEmpty()) {
-                                // Placeholder avec initiales
-                                Surface(
-                                    modifier = Modifier.fillMaxSize(),
-                                    shape = CircleShape,
-                                    color = Color(0xFF374151)
-                                ) {
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier.fillMaxSize()
-                                    ) {
-                                        Text(
-                                            text = publication.author?.let {
-                                                "${it.firstName.firstOrNull() ?: ""}${it.lastName.firstOrNull() ?: ""}"
-                                            } ?: "?",
-                                            color = GreenAccent,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
-                            } else {
-                                AsyncImage(
-                                    model = publication.author?.avatar,
-                                    contentDescription = "Avatar",
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(CircleShape)
-                                )
-                            }
+                            UserAvatarWithInitials(
+                                avatarUrl = publication.author?.avatar,
+                                firstName = publication.author?.firstName,
+                                lastName = publication.author?.lastName,
+                                modifier = Modifier.fillMaxSize(),
+                                backgroundColor = Color(0xFF374151),
+                                textColor = GreenAccent
+                            )
                         }
 
                         Spacer(modifier = Modifier.width(12.dp))

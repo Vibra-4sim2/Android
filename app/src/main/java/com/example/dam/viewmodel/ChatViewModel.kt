@@ -127,6 +127,16 @@ class ChatViewModel : ViewModel() {
                 if (_messages.value.none { it.id == messageUI.id }) {
                     _messages.value = (_messages.value + messageUI).sortedBy { it.timestamp }
                     Log.d(TAG, "✅ Message added to list (total: ${_messages.value.size})")
+
+                    // ✅ Mark chat as unread if message is from someone else
+                    if (!messageUI.isMe && messageUI.senderId != null) {
+                        currentSortieId?.let { sortieId ->
+                            getApplicationContext()?.let { context ->
+                                com.example.dam.utils.ReadMessagesManager.markChatAsUnread(context, sortieId)
+                                Log.d(TAG, "📬 Chat $sortieId marked as unread (new message from ${messageUI.author})")
+                            }
+                        }
+                    }
                 }
             }
 
