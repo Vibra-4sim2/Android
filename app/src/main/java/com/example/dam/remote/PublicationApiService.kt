@@ -1,5 +1,6 @@
 package com.example.dam.remote
 
+import com.example.dam.models.PublicationCreateResponse
 import com.example.dam.models.PublicationResponse
 import okhttp3.MultipartBody
 import okhttp3.RequestBody
@@ -18,6 +19,8 @@ interface PublicationApiService {
      *
      * ✅ BACKEND : http://localhost:3000/publication
      * ✅ ANDROID : http://10.0.2.2:3000/publication
+     *
+     * ⚠️ Returns PublicationCreateResponse (author is String, not Object)
      */
     @Multipart
     @POST("publication")  // ⚠️ SANS S !!!
@@ -28,7 +31,7 @@ interface PublicationApiService {
         @Part("tags") tags: RequestBody? = null,
         @Part("mentions") mentions: RequestBody? = null,
         @Part("location") location: RequestBody? = null
-    ): Response<PublicationResponse>
+    ): Response<PublicationCreateResponse>
 
     /**
      * GET /publication (SANS S !)
@@ -51,7 +54,7 @@ interface PublicationApiService {
     suspend fun likePublication(
         @Path("id") id: String,
         @Body userId: Map<String, String>
-    ): Response<PublicationResponse>
+    ): Response<PublicationCreateResponse>
 
     /**
      * GET /publication/author/{authorId} (SANS S !)

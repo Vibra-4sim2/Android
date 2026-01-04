@@ -32,7 +32,7 @@ import com.example.dam.Screens.ForgotPasswordScreen
 import com.example.dam.Screens.ResetPasswordScreen
 import com.example.dam.Screens.OnboardingScreen
 import com.example.dam.Screens.SortieDetailScreen
-
+import com.example.dam.Screens.PeopleRecommendationsScreen
 
 
 import com.example.dam.Screens.*
@@ -228,15 +228,18 @@ fun CycleApp(
 ) {
     val navController = rememberNavController()
 
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
-    ) {
-        NavigationGraph(
-            navController = navController,
-            googleSignInClient = googleSignInClient,
-            activity = activity
-        )
+    // ✅ Wrap with theme provider for global theme management
+    com.example.dam.ui.theme.ProvideAppTheme {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.background
+        ) {
+            NavigationGraph(
+                navController = navController,
+                googleSignInClient = googleSignInClient,
+                activity = activity
+            )
+        }
     }
 }
 
@@ -425,6 +428,11 @@ fun NavigationGraph(
             RecommendationHubScreen(navController = navController)
         }
 
+        // ✅ NEW: People Recommendations
+        composable("people_recommendations") {
+            PeopleRecommendationsScreen(navController = navController)
+        }
+
         // ✅ NEW: Flask AI Recommendations
         composable(NavigationRoutes.FLASK_RECOMMENDATIONS) {
             FlaskAiRecommendationsScreen(navController = navController)
@@ -463,6 +471,7 @@ object NavigationRoutes {
     const val SORTIE_DETAIL = "sortieDetail/{sortieId}"
     // ✅ AJOUTEZ CES 4 LIGNES
     const val RECOMMENDATION_HUB = "recommendation_hub"
+    const val PEOPLE_RECOMMENDATIONS = "people_recommendations"
     const val PREFERENCE_RECOMMENDATIONS = "preference_recommendations"
     const val WEATHER_RECOMMENDATIONS = "weather_recommendations"
     const val SMART_MATCHES = "smart_matches"
@@ -478,6 +487,10 @@ object NavigationRoutes {
 
     // ✅ Route pour les notifications
     const val NOTIFICATIONS = "notifications"
+
+    // ✅ Help Center and Settings Routes
+    const val HELP_CENTER = "help_center"
+    const val SETTINGS_ROUTE = "settings"
 
     // Helper functions
     fun createAdventureRoute(token: String) = "createadventure/$token"

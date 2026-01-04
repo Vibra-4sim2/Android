@@ -84,21 +84,32 @@ class ChatViewModel : ViewModel() {
             Log.d(TAG, "========================================")
             Log.d(TAG, "🏠 EVENT: joinedRoom - DIAGNOSTIC")
             Log.d(TAG, "========================================")
-            Log.d(TAG, "📨 Messages reçus: ${messages.size}")
+            Log.d(TAG, "📨 Messages reçus du socket: ${messages.size}")
             Log.d(TAG, "🔍 État AVANT traitement joinedRoom:")
             Log.d(TAG, "   isConnected: ${_isConnected.value}")
             Log.d(TAG, "   isSending: ${_isSending.value} ⚠️")
             Log.d(TAG, "   isLoading: ${_isLoading.value}")
+            Log.d(TAG, "   Messages existants (backend): ${_messages.value.size}")
 
             // ✅ CORRECTION CRITIQUE: Mettre isConnected à true quand on a rejoint la room
             _isConnected.value = true
             _isLoading.value = false
 
             currentUserId?.let { userId ->
-                val messagesUI = messages.map { it.toMessageUI(userId) }
-                _messages.value = messagesUI.sortedBy { it.timestamp }
+                val socketMessagesUI = messages.map { it.toMessageUI(userId) }
 
-                Log.d(TAG, "📦 ${messagesUI.size} messages affichés")
+                // ✅ Merge with existing messages from backend, avoiding duplicates
+                val existingMessageIds = _messages.value.map { it.id }.toSet()
+                val newMessages = socketMessagesUI.filter { it.id !in existingMessageIds }
+
+                if (newMessages.isNotEmpty()) {
+                    Log.d(TAG, "📥 ${newMessages.size} nouveaux messages du socket à ajouter")
+                    _messages.value = (_messages.value + newMessages).sortedBy { it.timestamp }
+                } else {
+                    Log.d(TAG, "✅ Aucun nouveau message (tous déjà chargés depuis le backend)")
+                }
+
+                Log.d(TAG, "📦 ${_messages.value.size} messages au total affichés")
 
                 // ✅ Mark all unread messages as read with a small delay
                 viewModelScope.launch {
@@ -338,6 +349,10 @@ class ChatViewModel : ViewModel() {
                     // Continue anyway, we can still use WebSocket
                 }
 
+                // ✅ NEW: Load messages from backend FIRST (to catch any shared messages)
+                Log.d(TAG, "📥 Loading messages from backend before joining room...")
+                loadMessagesFromBackend(sortieId, context)
+
                 if (!SocketService.isConnected()) {
                     Log.d(TAG, "🔌 Connexion au serveur Socket.IO...")
                     SocketService.connect(token)
@@ -384,6 +399,37 @@ class ChatViewModel : ViewModel() {
                 _errorMessage.value = "Erreur de connexion: ${e.message}"
                 _isLoading.value = false
             }
+        }
+    }
+
+    /**
+     * ✅ NEW: Load messages from backend API
+     * This ensures we get ALL messages, including those sent while the socket wasn't connected
+     */
+    private suspend fun loadMessagesFromBackend(sortieId: String, context: Context) {
+        try {
+            val token = getToken(context)
+            if (token.isNullOrEmpty()) {
+                Log.e(TAG, "❌ No token for loading messages")
+                return
+            }
+
+            Log.d(TAG, "📥 Fetching messages from backend for sortie: $sortieId")
+            val result = messageRepository.getMessages(sortieId, "Bearer $token")
+
+            result.onSuccess { messagesResponse ->
+                currentUserId?.let { userId ->
+                    val messagesUI = messagesResponse.messages.map { it.toMessageUI(userId) }
+                    _messages.value = messagesUI.sortedBy { it.timestamp }
+                    Log.d(TAG, "✅ Loaded ${messagesUI.size} messages from backend")
+                }
+                _isLoading.value = false
+            }.onFailure { error ->
+                Log.e(TAG, "❌ Failed to load messages from backend: ${error.message}")
+                // Don't set error message, we'll still try socket connection
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "💥 Exception loading messages from backend", e)
         }
     }
 

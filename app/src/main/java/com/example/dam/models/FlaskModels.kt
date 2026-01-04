@@ -96,3 +96,50 @@ data class SmartMatch(
     @SerializedName("reason") val reason: String? = null,
     @SerializedName("sortie") val sortie: SortieResponse? = null
 )
+
+// ============== PERSONALIZED SORTIE ANALYSIS MODELS ==============
+
+/**
+ * ✅ Response from Flask GET /sortie/analyze/{sortie_id}/personalized
+ */
+data class PersonalizedSortieAnalysisResponse(
+    @SerializedName("success") val success: Boolean,
+    @SerializedName("sortie") val sortie: Map<String, Any>?,
+    @SerializedName("analysis") val analysis: SortieAnalysis,
+    @SerializedName("personalized_tips") val personalizedTips: List<String>,
+    @SerializedName("safety_warnings") val safetyWarnings: List<String>,
+    @SerializedName("preparation_checklist") val preparationChecklist: List<String>,
+    @SerializedName("nutrition_tips") val nutritionTips: List<String>,
+    @SerializedName("equipment") val equipment: List<EquipmentItem>,
+    @SerializedName("equipment_summary") val equipmentSummary: EquipmentSummary,
+    @SerializedName("metadata") val metadata: Map<String, Any>?
+)
+
+data class SortieAnalysis(
+    @SerializedName("difficulty_score") val difficultyScore: Double,
+    @SerializedName("difficulty_label") val difficultyLabel: String,
+    @SerializedName("estimated_duration") val estimatedDuration: String,
+    @SerializedName("physical_demand") val physicalDemand: String,
+    @SerializedName("technical_demand") val technicalDemand: String,
+    @SerializedName("weather_sensitivity") val weatherSensitivity: String,
+    @SerializedName("best_season") val bestSeason: String
+)
+
+data class EquipmentItem(
+    @SerializedName("key") val key: String,
+    @SerializedName("name") val name: String,
+    @SerializedName("category") val category: String,
+    @SerializedName("image") val image: String?,
+    @SerializedName("description") val description: String,
+    @SerializedName("buy_link") val buyLink: String?,
+    @SerializedName("price_range") val priceRange: String?,
+    @SerializedName("necessity") val necessity: String,
+    @SerializedName("necessity_reason") val necessityReason: String
+)
+
+data class EquipmentSummary(
+    @SerializedName("essential_count") val essentialCount: Int,
+    @SerializedName("recommended_count") val recommendedCount: Int,
+    @SerializedName("optional_count") val optionalCount: Int,
+    @SerializedName("total_estimated_cost") val totalEstimatedCost: String
+)

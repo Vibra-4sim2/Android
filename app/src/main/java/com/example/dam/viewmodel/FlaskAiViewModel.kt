@@ -59,6 +59,16 @@ class FlaskAiViewModel : ViewModel() {
     private val _itineraryError = MutableStateFlow<String?>(null)
     val itineraryError: StateFlow<String?> = _itineraryError.asStateFlow()
 
+    // ============== PERSONALIZED SORTIE ANALYSIS STATE ==============
+    private val _sortieAnalysis = MutableStateFlow<PersonalizedSortieAnalysisResponse?>(null)
+    val sortieAnalysis: StateFlow<PersonalizedSortieAnalysisResponse?> = _sortieAnalysis.asStateFlow()
+
+    private val _sortieAnalysisLoading = MutableStateFlow(false)
+    val sortieAnalysisLoading: StateFlow<Boolean> = _sortieAnalysisLoading.asStateFlow()
+
+    private val _sortieAnalysisError = MutableStateFlow<String?>(null)
+    val sortieAnalysisError: StateFlow<String?> = _sortieAnalysisError.asStateFlow()
+
     // ============== RECOMMENDATIONS FUNCTIONS ==============
     fun loadAiRecommendations(token: String) {
         viewModelScope.launch {
@@ -218,6 +228,45 @@ class FlaskAiViewModel : ViewModel() {
         _recommendationsError.value = null
         _matchmakingError.value = null
         _itineraryError.value = null
+        _sortieAnalysisError.value = null
+    }
+
+    // ============== PERSONALIZED SORTIE ANALYSIS FUNCTIONS ==============
+    fun loadPersonalizedSortieAnalysis(token: String, sortieId: String) {
+        viewModelScope.launch {
+            _sortieAnalysisLoading.value = true
+            _sortieAnalysisError.value = null
+            try {
+                Log.d(TAG, "Loading personalized analysis for sortie: $sortieId")
+
+                when (val result = repository.getPersonalizedSortieAnalysis(token, sortieId)) {
+                    is Result.Success -> {
+                        val data = result.data
+                        _sortieAnalysis.value = data
+                        Log.d(TAG, "✅ Analysis loaded: ${data.analysis.difficultyLabel}")
+                    }
+                    is Result.Error -> {
+                        _sortieAnalysisError.value = result.message
+                        Log.e(TAG, "Error: ${result.message}")
+                    }
+                    is Result.Failure -> {
+                        _sortieAnalysisError.value = result.message.message ?: "Erreur inconnue"
+                        Log.e(TAG, "Failure: ${result.message.message}")
+                    }
+                    else -> Unit
+                }
+            } catch (e: Exception) {
+                _sortieAnalysisError.value = "Exception: ${e.message}"
+                Log.e(TAG, "Exception loading sortie analysis", e)
+            } finally {
+                _sortieAnalysisLoading.value = false
+            }
+        }
+    }
+
+    fun clearSortieAnalysis() {
+        _sortieAnalysis.value = null
+        _sortieAnalysisError.value = null
     }
 
     fun getFormattedDistance(): String {

@@ -270,13 +270,18 @@ class UserProfileViewModel(private val context: Context) : ViewModel() {
             try {
                 val result = publicationRepository.likePublication(publicationId)
                 if (result.isSuccess) {
-                    val updatedPublication = result.getOrNull()
-                    if (updatedPublication != null) {
-                        val list = _userPublications.value.toMutableList()
-                        val index = list.indexOfFirst { it.id == publicationId }
-                        if (index != -1) {
-                            list[index] = updatedPublication
-                            _userPublications.value = list
+                    val likeResponse = result.getOrNull()
+                    if (likeResponse != null) {
+                        // Update only the like-related fields in the existing publication
+                        _userPublications.value = _userPublications.value.map { pub ->
+                            if (pub.id == publicationId) {
+                                pub.copy(
+                                    likesCount = likeResponse.likesCount,
+                                    likedBy = likeResponse.likedBy
+                                )
+                            } else {
+                                pub
+                            }
                         }
                     }
                 }

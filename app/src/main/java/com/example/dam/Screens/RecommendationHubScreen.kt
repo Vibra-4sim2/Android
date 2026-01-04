@@ -49,17 +49,15 @@ fun RecommendationHubScreen(
 
     // ✅ FLASK STATE
     val flaskRecommendations by flaskViewModel.recommendations.collectAsState()
-    val flaskMatches by flaskViewModel.matches.collectAsState()
     val userCluster by flaskViewModel.userCluster.collectAsState()
     val isLoading by flaskViewModel.recommendationsLoading.collectAsState()
     val error by flaskViewModel.recommendationsError.collectAsState()
 
-    // Load Flask data on startup
+    // Load Flask sortie recommendations on startup
     LaunchedEffect(Unit) {
         val token = UserPreferences.getToken(context)
         if (token != null) {
             flaskViewModel.loadAiRecommendations(token)
-            flaskViewModel.loadMatchmaking(token, minSimilarity = 0.05, limit = 10)
         }
     }
 
@@ -97,20 +95,20 @@ fun RecommendationHubScreen(
 
                     Column {
                         Text(
-                            "AI Recommendations",
+                            "✨ Adventures for You",
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         if (userCluster != null) {
                             Text(
-                                "Cluster $userCluster • ${flaskRecommendations.size} adventures",
+                                "${flaskRecommendations.size} adventures match your preferences",
                                 fontSize = 14.sp,
                                 color = GreenAccent
                             )
                         } else {
                             Text(
-                                "Find your perfect adventure",
+                                "Discover adventures tailored to your style",
                                 fontSize = 14.sp,
                                 color = GreenAccent
                             )
@@ -130,13 +128,13 @@ fun RecommendationHubScreen(
                     CircularProgressIndicator(color = GreenAccent)
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "🔥 Loading AI recommendations...",
+                        "🔥 Finding perfect adventures for you...",
                         color = TextSecondary,
                         fontSize = 14.sp
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "This may take 30-60 seconds",
+                        "Analyzing your adventure preferences",
                         color = TextTertiary,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center
@@ -181,7 +179,6 @@ fun RecommendationHubScreen(
                             val token = UserPreferences.getToken(context)
                             token?.let {
                                 flaskViewModel.loadAiRecommendations(it)
-                                flaskViewModel.loadMatchmaking(it, 0.05, 10)
                             }
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = GreenAccent)
@@ -195,7 +192,7 @@ fun RecommendationHubScreen(
             return
         }
 
-        // Content
+        // Content - Directly show sortie recommendations card
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(20.dp),
@@ -203,7 +200,7 @@ fun RecommendationHubScreen(
         ) {
             item {
                 Text(
-                    "Choose your recommendation type",
+                    "Adventures picked just for you",
                     fontSize = 16.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = TextSecondary,
@@ -211,12 +208,12 @@ fun RecommendationHubScreen(
                 )
             }
 
-            // ✅ CARD 1: Flask AI Recommendations
+            // ✅ CARD 1: Personalized Sortie Recommendations
             item {
                 RecommendationCard(
-                    title = "🤖 Flask AI Powered",
-                    subtitle = "ML-generated recommendations from Python",
-                    icon = Icons.Default.Psychology,
+                    title = "✨ Sorties for You",
+                    subtitle = "Adventures that match your interests and style",
+                    icon = Icons.Default.Star,
                     gradient = Brush.linearGradient(
                         colors = listOf(
                             Color(0xFF9C27B0),
@@ -232,47 +229,6 @@ fun RecommendationHubScreen(
                 )
             }
 
-            // ✅ CARD 2: Flask Matchmaking
-            item {
-                RecommendationCard(
-                    title = "🎯 Smart Matchmaking",
-                    subtitle = "Find similar users with KNN algorithm",
-                    icon = Icons.Default.People,
-                    gradient = Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFFFF6B6B),
-                            Color(0xFFFF8E53)
-                        )
-                    ),
-                    count = flaskMatches.size,
-                    isSelected = selectedCard == "matchmaking",
-                    onClick = {
-                        selectedCard = "matchmaking"
-                        navController.navigate("flask_matchmaking")
-                    }
-                )
-            }
-
-            // ✅ CARD 3: AI Itinerary Generator
-            item {
-                RecommendationCard(
-                    title = "🗺️ AI Itinerary",
-                    subtitle = "Generate personalized routes with Gemini AI",
-                    icon = Icons.Default.Route,
-                    gradient = Brush.linearGradient(
-                        colors = listOf(
-                            Color(0xFF4A90E2),
-                            Color(0xFF357ABD)
-                        )
-                    ),
-                    count = 0,
-                    isSelected = selectedCard == "itinerary",
-                    onClick = {
-                        selectedCard = "itinerary"
-                        navController.navigate("flask_itinerary")
-                    }
-                )
-            }
 
             item { Spacer(Modifier.height(80.dp)) }
         }
@@ -457,7 +413,7 @@ fun FlaskAiRecommendationsScreen(
 
                     Column {
                         Text(
-                            "🤖 Flask AI",
+                            "✨ Adventures for You",
                             fontSize = 22.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
@@ -465,14 +421,14 @@ fun FlaskAiRecommendationsScreen(
                         if (userCluster != null) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    Icons.Default.Psychology,
+                                    Icons.Default.Star,
                                     contentDescription = null,
                                     tint = Color(0xFF9C27B0),
                                     modifier = Modifier.size(16.dp)
                                 )
                                 Spacer(Modifier.width(4.dp))
                                 Text(
-                                    "Cluster $userCluster • ${recommendations.size} adventures",
+                                    "${recommendations.size} adventures match your style",
                                     fontSize = 13.sp,
                                     color = Color(0xFF9C27B0)
                                 )
@@ -492,13 +448,13 @@ fun FlaskAiRecommendationsScreen(
                     CircularProgressIndicator(color = GreenAccent)
                     Spacer(Modifier.height(16.dp))
                     Text(
-                        "🔥 Waking up Flask...",
+                        "🔥 Finding perfect adventures for you...",
                         color = TextSecondary,
                         fontSize = 14.sp
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "This may take 30-60 seconds",
+                        "Analyzing your preferences",
                         color = TextTertiary,
                         fontSize = 12.sp,
                         textAlign = TextAlign.Center
@@ -524,8 +480,8 @@ fun FlaskAiRecommendationsScreen(
                         modifier = Modifier.size(64.dp)
                     )
                     Spacer(Modifier.height(16.dp))
-                    Text("Flask API Error", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
-                    Text(error ?: "Unknown error", color = TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
+                    Text("Oops! Something went wrong", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text(error ?: "Unable to load recommendations", color = TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = {
@@ -559,9 +515,9 @@ fun FlaskAiRecommendationsScreen(
                         modifier = Modifier.size(64.dp)
                     )
                     Spacer(Modifier.height(16.dp))
-                    Text("No AI recommendations yet", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
+                    Text("No adventures yet", color = TextPrimary, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                     Text(
-                        "Complete preferences to get Flask suggestions",
+                        "Complete your preferences to discover adventures tailored to you",
                         color = TextSecondary,
                         fontSize = 14.sp,
                         textAlign = TextAlign.Center
@@ -601,9 +557,9 @@ fun FlaskAiRecommendationsScreen(
                         )
                         Spacer(Modifier.width(12.dp))
                         Column {
-                            Text("Powered by Flask AI", fontSize = 12.sp, color = TextSecondary)
+                            Text("Personalized for You", fontSize = 12.sp, color = TextSecondary)
                             Text(
-                                "Python ML recommendations",
+                                "Adventures matching your vibe",
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Medium,
                                 color = Color.White

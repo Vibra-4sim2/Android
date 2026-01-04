@@ -3,6 +3,7 @@ package com.example.dam.repository
 import android.content.Context
 import android.net.Uri
 import android.util.Log
+import com.example.dam.models.PublicationCreateResponse
 import com.example.dam.models.PublicationErrorResponse
 import com.example.dam.models.PublicationResponse
 import com.example.dam.remote.RetrofitInstance
@@ -101,8 +102,8 @@ class PublicationRepository(private val context: Context) {
             Log.d(TAG, "   location: ${location ?: "null"}")
             Log.d(TAG, "═══════════════════════════════════")
 
-            // ✅ Appel API
-            val response: Response<PublicationResponse> = api.createPublication(
+            // ✅ Appel API - Returns PublicationCreateResponse (author is String)
+            val response: Response<PublicationCreateResponse> = api.createPublication(
                 author = authorBody,
                 content = contentBody,
                 file = filePart,
@@ -119,8 +120,28 @@ class PublicationRepository(private val context: Context) {
             }
 
             if (response.isSuccessful && response.body() != null) {
-                Log.d(TAG, "✅ Publication created: ${response.body()!!.id}")
-                Result.success(response.body()!!)
+                val createResponse = response.body()!!
+                Log.d(TAG, "✅ Publication created: ${createResponse.id}")
+
+                // Convert PublicationCreateResponse to PublicationResponse for compatibility
+                val publicationResponse = PublicationResponse(
+                    id = createResponse.id,
+                    author = null, // Will be populated when fetching from feed
+                    content = createResponse.content,
+                    image = createResponse.image,
+                    tags = createResponse.tags,
+                    mentions = null, // Will be populated when fetching from feed
+                    location = createResponse.location,
+                    likesCount = createResponse.likesCount,
+                    commentsCount = createResponse.commentsCount,
+                    sharesCount = createResponse.sharesCount,
+                    likedBy = createResponse.likedBy,
+                    isActive = createResponse.isActive,
+                    createdAt = createResponse.createdAt,
+                    updatedAt = createResponse.updatedAt
+                )
+
+                Result.success(publicationResponse)
             } else {
                 val errorBody = response.errorBody()?.string()
                 val errorMessage = parseErrorMessage(errorBody)
@@ -168,7 +189,7 @@ class PublicationRepository(private val context: Context) {
     /**
      * Liker/Unliker une publication
      */
-    suspend fun likePublication(publicationId: String): Result<PublicationResponse> {
+    suspend fun likePublication(publicationId: String): Result<PublicationCreateResponse> {
         return try {
             val userId = UserPreferences.getUserId(context)
             if (userId.isNullOrEmpty()) {
@@ -176,7 +197,7 @@ class PublicationRepository(private val context: Context) {
             }
 
             Log.d(TAG, "❤️ Toggling like on publication: $publicationId")
-            val response: Response<PublicationResponse> = api.likePublication(
+            val response: Response<PublicationCreateResponse> = api.likePublication(
                 publicationId,
                 mapOf("userId" to userId)
             )
@@ -227,7 +248,7 @@ class PublicationRepository(private val context: Context) {
                 is List<*> -> msg.joinToString(", ")
                 else -> error.error ?: "Unknown error"
             }
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             errorBody ?: "Unknown error"
         }
     }

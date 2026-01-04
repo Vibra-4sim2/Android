@@ -10,15 +10,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +47,11 @@ fun TabBarView(
     navController: NavHostController
 ) {
     val context = LocalContext.current
+
+    // ✅ Use global theme state
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
+
     var showOptions by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -312,6 +317,11 @@ fun TabBarView(
                     }
 
 
+                    // ✅ NEW: People Recommendations
+                    composable("people_recommendations") {
+                        PeopleRecommendationsScreen(navController = internalNavController)
+                    }
+
                     // ✅ NEW: Flask AI Recommendations
                     composable("flask_recommendations") {
                         FlaskAiRecommendationsScreen(navController = internalNavController)
@@ -330,6 +340,22 @@ fun TabBarView(
                     composable("saved") {
                         SavedSortiesScreen(navController = internalNavController)
                     }
+
+                    // ✅ Help Center Route
+                    composable("help_center") {
+                        HelpCenterScreen(navController = internalNavController)
+                    }
+
+                    // ✅ Settings Route
+                    composable("settings") {
+                        SettingsScreen(
+                            navController = internalNavController,
+                            onThemeChanged = {
+                                // This will trigger recomposition when theme changes
+                                // The parent activity should handle theme change
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -342,20 +368,28 @@ fun TabBarView(
                     .align(Alignment.TopCenter)
                     .statusBarsPadding()
             ) {
+                // ✅ Dynamic colors based on theme
+                val topBarBg = if (isDarkMode) BackgroundGradientStart else BackgroundLight
+                val topBarGradient1 = if (isDarkMode) CardDark.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.95f)
+                val topBarGradient2 = if (isDarkMode) CardDark.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.85f)
+                val topBarTextColor = if (isDarkMode) TextPrimary else TextPrimaryLight
+                val topBarAccentColor = if (isDarkMode) GreenAccent.copy(alpha = 0.7f) else GreenAccentLight
+                val topBarCircleBg = if (isDarkMode) BackgroundDark else CardLight
+                val topBarCircleBorder = if (isDarkMode) BorderColor else BorderColorLight
+                val topBarCardBg = if (isDarkMode) CardDark.copy(alpha = 0.5f) else CardLight
+
                 // Top Bar - Glass Design
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    color = BackgroundGradientStart
+                    color = topBarBg,
+                    shadowElevation = if (isDarkMode) 0.dp else 4.dp
                 ) {
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .background(
                                 Brush.verticalGradient(
-                                    colors = listOf(
-                                        CardDark.copy(alpha = 0.8f),
-                                        CardDark.copy(alpha = 0.6f)
-                                    )
+                                    colors = listOf(topBarGradient1, topBarGradient2)
                                 )
                             )
                             .padding(horizontal = 20.dp)
@@ -368,13 +402,13 @@ fun TabBarView(
                                 text = "V!BRA",
                                 fontSize = 24.sp,
                                 fontWeight = FontWeight.Bold,
-                                color = TextPrimary,
+                                color = topBarTextColor,
                                 letterSpacing = 1.sp
                             )
                             Text(
                                 text = "Explore Adventures",
                                 fontSize = 12.sp,
-                                color = GreenAccent.copy(alpha = 0.7f)
+                                color = topBarAccentColor
                             )
                         }
 
@@ -390,14 +424,15 @@ fun TabBarView(
                                     }
                                 },
                                 shape = CircleShape,
-                                color = BackgroundDark,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                                modifier = Modifier.size(40.dp)
+                                color = topBarCircleBg,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, topBarCircleBorder),
+                                modifier = Modifier.size(40.dp),
+                                shadowElevation = if (isDarkMode) 0.dp else 2.dp
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .background(CardDark.copy(alpha = 0.5f)),
+                                        .background(topBarCardBg),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     BadgedBox(
@@ -419,7 +454,7 @@ fun TabBarView(
                                         Icon(
                                             imageVector = Icons.Default.Notifications,
                                             contentDescription = "Notifications",
-                                            tint = GreenAccent,
+                                            tint = topBarAccentColor,
                                             modifier = Modifier.size(22.dp)
                                         )
                                     }
@@ -430,26 +465,27 @@ fun TabBarView(
                             Surface(
                                 onClick = { showOptions = !showOptions },
                                 shape = CircleShape,
-                                color = BackgroundDark,
-                                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor),
-                                modifier = Modifier.size(40.dp)
+                                color = topBarCircleBg,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, topBarCircleBorder),
+                                modifier = Modifier.size(40.dp),
+                                shadowElevation = if (isDarkMode) 0.dp else 2.dp
                             ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(CardDark.copy(alpha = 0.5f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.KeyboardArrowDown,
-                                    contentDescription = "Menu",
-                                    tint = GreenAccent,
+                                Box(
                                     modifier = Modifier
-                                        .size(24.dp)
-                                        .rotate(rotation)
-                                )
+                                        .fillMaxSize()
+                                        .background(topBarCardBg),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Menu",
+                                        tint = topBarAccentColor,
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .rotate(rotation)
+                                    )
+                                }
                             }
-                        }
                         }
                     }
                 }
@@ -479,7 +515,9 @@ fun TabBarView(
                             internalNavController.navigate("saved") {
                                 launchSingleTop = true
                             }
-                        }
+                        },
+                        navController = internalNavController,
+                        onDismiss = { showOptions = false }
                     )
                 }
             }
@@ -509,17 +547,18 @@ fun TabBarView(
 
                         Log.d("TabBarView", "🔘 Tab clicked: index=$index, route=$route, currentRoute=$currentRoute")
 
-                        // ✅ FIX: Always navigate, even if on same route (clears back stack)
+                        // ✅ FIX: Clear back stack completely to prevent Settings → Edit Profile → Home issue
                         Log.d("TabBarView", "➡️ Navigating to $route")
                         internalNavController.navigate(route) {
-                            // Pop up to the start destination and save state
-                            popUpTo(internalNavController.graph.startDestinationId) {
-                                saveState = true
+                            // Pop everything up to and including the route itself to clear back stack
+                            popUpTo(route) {
+                                inclusive = true
+                                saveState = false  // ✅ Don't save state to prevent restoration issues
                             }
                             // Avoid multiple copies of the same destination
                             launchSingleTop = true
-                            // Restore state when reselecting a previously selected item
-                            restoreState = true
+                            // ✅ Don't restore state - this was causing the Settings issue
+                            restoreState = false
                         }
                     }
                 )
@@ -585,7 +624,7 @@ fun TabBarView(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Icon(
-                            Icons.Default.Logout,
+                            Icons.AutoMirrored.Filled.Logout,
                             contentDescription = null,
                             tint = ErrorRed
                         )
@@ -631,7 +670,9 @@ fun TabBarView(
 @Composable
 fun GlassDropdownMenu(
     onLogout: () -> Unit,
-    onSavedClick: () -> Unit
+    onSavedClick: () -> Unit,
+    navController: NavHostController,
+    onDismiss: () -> Unit = {}
 ) {
     Surface(
         modifier = Modifier
@@ -661,10 +702,24 @@ fun GlassDropdownMenu(
                 label = "Saved",
                 onClick = onSavedClick
             )
-            GlassMenuItem(icon = Icons.Default.HelpOutline, label = "Help Center")
-            GlassMenuItem(icon = Icons.Default.Settings, label = "Settings")
             GlassMenuItem(
-                icon = Icons.Default.Logout,
+                icon = Icons.AutoMirrored.Filled.HelpOutline,
+                label = "Help Center",
+                onClick = {
+                    onDismiss()  // ✅ Close dropdown
+                    navController.navigate("help_center")
+                }
+            )
+            GlassMenuItem(
+                icon = Icons.Default.Settings,
+                label = "Settings",
+                onClick = {
+                    onDismiss()  // ✅ Close dropdown
+                    navController.navigate("settings")
+                }
+            )
+            GlassMenuItem(
+                icon = Icons.AutoMirrored.Filled.Logout,
                 label = "Logout",
                 onClick = onLogout,
                 tintColor = ErrorRed
@@ -724,6 +779,19 @@ fun GlassBottomNav(
     selectedIndex: Int,
     onTabSelected: (Int) -> Unit
 ) {
+    // ✅ Use global theme for dynamic colors
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
+
+    val navGlowColor1 = if (isDarkMode) GreenAccent.copy(alpha = 0.2f) else GreenAccentLight.copy(alpha = 0.1f)
+    val navGlowColor2 = if (isDarkMode) TealAccent.copy(alpha = 0.2f) else GreenLightMode.copy(alpha = 0.1f)
+    val navBg = if (isDarkMode) CardGlass else CardLight
+    val navBorder = if (isDarkMode) BorderColor else BorderColorLight
+    val navGradient1 = if (isDarkMode) CardDark.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.95f)
+    val navGradient2 = if (isDarkMode) CardDark.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.98f)
+    val navAccent = if (isDarkMode) GreenAccent else GreenAccentLight
+    val navCircleBorder = if (isDarkMode) BackgroundDark else CardLight
+
     Box(modifier = Modifier.fillMaxWidth()) {
         // Glow effect
         Box(
@@ -733,11 +801,7 @@ fun GlassBottomNav(
                 .align(Alignment.Center)
                 .background(
                     Brush.horizontalGradient(
-                        colors = listOf(
-                            GreenAccent.copy(alpha = 0.2f),
-                            TealAccent.copy(alpha = 0.2f),
-                            GreenAccent.copy(alpha = 0.2f)
-                        )
+                        colors = listOf(navGlowColor1, navGlowColor2, navGlowColor1)
                     ),
                     shape = RoundedCornerShape(35.dp)
                 )
@@ -748,20 +812,16 @@ fun GlassBottomNav(
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(35.dp),
-            color = CardGlass,
-            shadowElevation = 8.dp,
-            border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+            color = navBg,
+            shadowElevation = if (isDarkMode) 8.dp else 12.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, navBorder)
         ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         Brush.horizontalGradient(
-                            colors = listOf(
-                                CardDark.copy(alpha = 0.5f),
-                                CardDark.copy(alpha = 0.6f),
-                                CardDark.copy(alpha = 0.5f)
-                            )
+                            colors = listOf(navGradient1, navGradient2, navGradient1)
                         )
                     )
                     .padding(vertical = 8.dp, horizontal = 8.dp),
@@ -777,7 +837,7 @@ fun GlassBottomNav(
                                     .background(
                                         Brush.radialGradient(
                                             colors = listOf(
-                                                GreenAccent.copy(alpha = 0.6f),
+                                                navAccent.copy(alpha = 0.6f),
                                                 Color.Transparent
                                             )
                                         ),
@@ -792,7 +852,7 @@ fun GlassBottomNav(
                                 color = Color.Transparent,
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .border(4.dp, BackgroundDark, CircleShape)
+                                    .border(4.dp, navCircleBorder, CircleShape)
                             ) {
                                 Box(
                                     modifier = Modifier

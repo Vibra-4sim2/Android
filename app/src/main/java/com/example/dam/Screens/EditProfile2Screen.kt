@@ -9,7 +9,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -21,16 +21,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
-
-private val BackgroundColor = Color(0xFF0B0B0B)
-val PrimaryText = Color.White
-private val SecondaryText = Color(0xFFBDBDBD)
-private val AccentGreen = Color(0xFF36C36A)
-private val ButtonGradientStart = Color(0xFF39C06B)
-private val ButtonGradientEnd = Color(0xFF2EA15A)
+import com.example.dam.ui.theme.*
 
 @Composable
-fun EditProfile2Screen(navController: NavHostController) {  // ✅ Removed showDropdown parameter
+fun EditProfile2Screen(navController: NavHostController) {
+    // ✅ Use global theme state
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
 
     var cyclingLevel by remember { mutableStateOf("Beginner") }
     var physicalCondition by remember { mutableStateOf("Average") }
@@ -39,39 +36,54 @@ fun EditProfile2Screen(navController: NavHostController) {  // ✅ Removed showD
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundColor)
+            .background(
+                Brush.verticalGradient(
+                    colors = if (isDarkMode) {
+                        listOf(BackgroundGradientStart, BackgroundDark, BackgroundGradientEnd)
+                    } else {
+                        listOf(BackgroundLightGradientStart, BackgroundLight, BackgroundLightGradientEnd)
+                    }
+                )
+            )
             .imePadding()  // ✅ Handle keyboard
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(top = 64.dp) // ✅ Space for top bar
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 22.dp)
-                .padding(top = 22.dp, bottom = 100.dp)
+                .padding(bottom = 120.dp) // ✅ Space for bottom nav bar
         ) {
+            Spacer(modifier = Modifier.height(16.dp))
+
             // --- Back button + Title ---
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(bottom = 20.dp)
             ) {
                 IconButton(
-                    onClick = { navController.popBackStack() },
+                    onClick = {
+                        navController.navigate("profile") {
+                            popUpTo("profile") { inclusive = true }
+                        }
+                    },
                     modifier = Modifier
                         .size(42.dp)
                         .background(
-                            color = Color.White.copy(alpha = 0.15f),
+                            color = CardGlass,
                             shape = CircleShape
                         )
                         .border(
                             width = 1.5.dp,
-                            color = Color.White.copy(alpha = 0.30f),
+                            color = BorderColor,
                             shape = CircleShape
                         )
                 ) {
                     Icon(
-                        imageVector = Icons.Default.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = Color.White,
+                        tint = TextPrimary,
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -80,8 +92,8 @@ fun EditProfile2Screen(navController: NavHostController) {  // ✅ Removed showD
 
                 Text(
                     text = "Edit Profile",
-                    color = Color.White,
-                    fontSize = 24.sp,
+                    color = TextPrimary,
+                    fontSize = 28.sp,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -119,19 +131,24 @@ fun EditProfile2Screen(navController: NavHostController) {  // ✅ Removed showD
 
             Spacer(modifier = Modifier.height(30.dp))
 
-            // ✅ Submit Button (go to Profile or Home)
+            // ✅ Submit Button with modern gradient design
             Button(
                 onClick = {
-                    // Navigate to home with profile tab selected
-                    navController.navigate("home") {
-                        popUpTo("edit_profile") { inclusive = true }
+                    // Navigate to profile screen
+                    navController.navigate("profile") {
+                        popUpTo("profile") { inclusive = true }
                     }
                 },
                 modifier = Modifier
                     .fillMaxWidth(0.7f)
                     .align(Alignment.CenterHorizontally)
                     .height(52.dp)
-                    .shadow(8.dp, RoundedCornerShape(14.dp)),
+                    .shadow(
+                        elevation = 12.dp,
+                        shape = RoundedCornerShape(14.dp),
+                        ambientColor = GreenAccent.copy(alpha = 0.4f),
+                        spotColor = GreenAccent.copy(alpha = 0.6f)
+                    ),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(
                     containerColor = Color.Transparent
@@ -143,7 +160,7 @@ fun EditProfile2Screen(navController: NavHostController) {  // ✅ Removed showD
                         .fillMaxSize()
                         .background(
                             Brush.horizontalGradient(
-                                listOf(ButtonGradientStart, ButtonGradientEnd)
+                                listOf(GreenLight, GreenAccent)
                             ),
                             RoundedCornerShape(14.dp)
                         ),
@@ -172,7 +189,7 @@ private fun QuestionBlock(
 ) {
     Text(
         text = title,
-        color = PrimaryText,
+        color = TextPrimary,
         fontSize = 16.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(bottom = 12.dp)
@@ -190,14 +207,14 @@ private fun QuestionBlock(
                 selected = selected == option,
                 onClick = { onSelect(option) },
                 colors = RadioButtonDefaults.colors(
-                    selectedColor = AccentGreen,
-                    unselectedColor = SecondaryText
+                    selectedColor = GreenAccent,
+                    unselectedColor = TextSecondary
                 )
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
                 text = option,
-                color = if (selected == option) PrimaryText else SecondaryText,
+                color = if (selected == option) TextPrimary else TextSecondary,
                 fontSize = 15.sp,
                 fontWeight = if (selected == option) FontWeight.Medium else FontWeight.Normal
             )

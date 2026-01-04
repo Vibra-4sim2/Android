@@ -6,11 +6,13 @@ import com.example.dam.models.FlaskItineraryRequest
 import com.example.dam.models.FlaskItineraryResponse
 import com.example.dam.models.FlaskRecommendationsResponse
 import com.example.dam.models.MatchmakingResponse
+import com.example.dam.models.PersonalizedSortieAnalysisResponse
 import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 /**
@@ -56,4 +58,18 @@ interface FlaskAiApi {
         @Header("Authorization") token: String,
         @Body request: FlaskItineraryRequest
     ): Response<FlaskItineraryResponse>
+
+    /**
+     * GET /sortie/analyze/{sortie_id}/personalized
+     * Obtient une analyse personnalisée d'une sortie selon le profil utilisateur
+     *
+     * @param token JWT token (format: "Bearer eyJ...")
+     * @param sortieId ID de la sortie à analyser
+     * @return Analyse personnalisée avec conseils, équipements, et avertissements
+     */
+    @GET("sortie/analyze/{sortie_id}/personalized")
+    suspend fun getPersonalizedSortieAnalysis(
+        @Header("Authorization") token: String,
+        @Path("sortie_id") sortieId: String
+    ): Response<PersonalizedSortieAnalysisResponse>
 }

@@ -64,6 +64,11 @@ fun HomeExploreScreen(
     savedSortiesViewModel: SavedSortiesViewModel = viewModel()
 ) {
     val context = LocalContext.current
+
+    // ✅ Use global theme state
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
+
     val token = UserPreferences.getToken(context) ?: ""
     val currentUserId = UserPreferences.getUserId(context) ?: ""
 
@@ -140,7 +145,11 @@ fun HomeExploreScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(BackgroundGradientStart, BackgroundDark, BackgroundGradientEnd)
+                    colors = if (isDarkMode) {
+                        listOf(BackgroundGradientStart, BackgroundDark, BackgroundGradientEnd)
+                    } else {
+                        listOf(BackgroundLightGradientStart, BackgroundLight, BackgroundLightGradientEnd)
+                    }
                 )
             )
     ) {
@@ -258,7 +267,16 @@ fun HomeExploreScreen(
                             Icons.Default.Stars,
                             false
                         ) {
-                            navController.navigate("recommendation_hub")
+                            navController.navigate("flask_recommendations")
+                        }
+                    }
+                    item {
+                        FilterPill(
+                            "People",
+                            Icons.Default.People,
+                            false
+                        ) {
+                            navController.navigate("people_recommendations")
                         }
                     }
                     item {

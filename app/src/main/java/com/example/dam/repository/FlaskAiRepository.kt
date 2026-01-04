@@ -5,6 +5,7 @@ import com.example.dam.models.FlaskItineraryRequest
 import com.example.dam.models.FlaskItineraryResponse
 import com.example.dam.models.FlaskRecommendationsResponse
 import com.example.dam.models.MatchmakingResponse
+import com.example.dam.models.PersonalizedSortieAnalysisResponse
 import com.example.dam.remote.RetrofitFlask
 import com.example.dam.utils.Result
 import kotlinx.coroutines.Dispatchers
@@ -153,6 +154,55 @@ class FlaskAiRepository {
                         401 -> "Token JWT invalide ou manquant"
                         404 -> "Préférences utilisateur non trouvées"
                         503 -> "Service d'itinéraire non disponible"
+                        else -> "Erreur ${response.code()}: $errorBody"
+                    }
+                    Log.e(TAG, "❌ $errorMsg")
+                    Result.Error(errorMsg)
+                }
+            } catch (e: Exception) {
+                val errorMsg = "Erreur réseau Flask: ${e.message}"
+                Log.e(TAG, "❌ EXCEPTION: $errorMsg", e)
+                Result.Failure(e)
+            }
+        }
+    }
+
+    /**
+     * Get personalized sortie analysis adapted to user profile
+     *
+     * @param token JWT token (will be formatted as "Bearer token")
+     * @param sortieId ID of the sortie to analyze
+     * @return Result with PersonalizedSortieAnalysisResponse
+     */
+    suspend fun getPersonalizedSortieAnalysis(
+        token: String,
+        sortieId: String
+    ): Result<PersonalizedSortieAnalysisResponse> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val bearerToken = if (token.startsWith("Bearer ")) token else "Bearer $token"
+
+                Log.d(TAG, "🔍 Analyzing sortie $sortieId for user profile")
+                Log.d(TAG, "🔑 Using token: ${bearerToken.take(30)}...")
+
+                val response = api.getPersonalizedSortieAnalysis(bearerToken, sortieId)
+
+                if (response.isSuccessful && response.body() != null) {
+                    val data = response.body()!!
+
+                    Log.d(TAG, "✅ Sortie analysis retrieved successfully")
+                    Log.d(TAG, "✅ Difficulty: ${data.analysis.difficultyLabel}")
+                    Log.d(TAG, "✅ Equipment items: ${data.equipment.size}")
+                    Log.d(TAG, "✅ Tips: ${data.personalizedTips.size}")
+                    Log.d(TAG, "✅ Safety warnings: ${data.safetyWarnings.size}")
+
+                    Result.Success(data)
+                } else {
+                    val errorBody = response.errorBody()?.string()
+                    val errorMsg = when (response.code()) {
+                        401 -> "Token JWT invalide ou manquant"
+                        404 -> "Sortie non trouvée"
+                        503 -> "Service d'analyse non disponible"
                         else -> "Erreur ${response.code()}: $errorBody"
                     }
                     Log.e(TAG, "❌ $errorMsg")

@@ -33,6 +33,11 @@ fun MessagesListScreen(
     viewModel: MessagesViewModel = viewModel()
 ) {
     val context = LocalContext.current
+
+    // ✅ Use global theme state
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
+
     var selectedTab by remember { mutableStateOf("groups") }
     val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
     val coroutineScope = rememberCoroutineScope()
@@ -93,11 +98,11 @@ fun MessagesListScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(
-                        BackgroundGradientStart,
-                        BackgroundDark,
-                        BackgroundGradientEnd
-                    )
+                    colors = if (isDarkMode) {
+                        listOf(BackgroundGradientStart, BackgroundDark, BackgroundGradientEnd)
+                    } else {
+                        listOf(BackgroundLightGradientStart, BackgroundLight, BackgroundLightGradientEnd)
+                    }
                 )
             )
     ) {

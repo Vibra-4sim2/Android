@@ -70,5 +70,28 @@ val ShadowColor = Color(0x80000000)  // Black with 50% opacity
 val GlowGreen = Color(0x997FDB8A)  // Green glow effect
 val ShimmerLight = Color(0x33FFFFFF)  // Shimmer effect
 
+// ✅ LIGHT THEME COLORS - IMPROVED FOR BETTER UI
+// Light mode backgrounds - Clean and modern
+val BackgroundLight = Color(0xFFFAFBFA)  // Very light warm white (better than greenish)
+val BackgroundLightGradientStart = Color(0xFFF5F8F7)  // Subtle light gradient top
+val BackgroundLightGradientEnd = Color(0xFFFFFFFF)  // Pure white bottom
 
+// Light mode cards - Elevated with subtle shadows
+val CardLight = Color(0xFFFFFFFF)  // Pure white cards
+val CardLightGlass = Color(0x15000000)  // Black with 8% opacity (lighter glass)
+val CardLightOverlay = Color(0x0A000000)  // Black with 4% opacity (very subtle)
 
+// Light mode accent colors - Vibrant and visible
+val GreenAccentLight = Color(0xFF2E7D32)  // Rich forest green (darker, more visible)
+val GreenLightMode = Color(0xFF43A047)  // Vibrant medium green
+val GreenDarkLight = Color(0xFF1B5E20)  // Deep forest green for emphasis
+
+// Light mode text - High contrast and readable
+val TextPrimaryLight = Color(0xFF212121)  // Rich dark gray (not pure black)
+val TextSecondaryLight = Color(0xFF616161)  // Medium gray (better contrast)
+val TextTertiaryLight = Color(0xFF9E9E9E)  // Light gray for subtle text
+
+// Light mode UI elements - Refined and subtle
+val BorderColorLight = Color(0x1A000000)  // Black with 10% opacity (lighter borders)
+val DividerColorLight = Color(0x0D000000)  // Black with 5% opacity (subtle dividers)
+val ShadowColorLight = Color(0x1F000000)  // Black with 12% opacity (soft shadows)

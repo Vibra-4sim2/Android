@@ -41,6 +41,10 @@ fun ProfileScreen(
 ) {
     val context = LocalContext.current
 
+    // ✅ Use global theme state
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
+
     // ✅ FIX: Use UserPreferences for consistent session management
     val token = UserPreferences.getToken(context) ?: ""
     val userId = UserPreferences.getUserId(context) ?: ""
@@ -107,7 +111,11 @@ fun ProfileScreen(
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(BackgroundGradientStart, BackgroundDark, BackgroundGradientEnd)
+                    colors = if (isDarkMode) {
+                        listOf(BackgroundGradientStart, BackgroundDark, BackgroundGradientEnd)
+                    } else {
+                        listOf(BackgroundLightGradientStart, BackgroundLight, BackgroundLightGradientEnd)
+                    }
                 )
             )
     ) {
@@ -208,6 +216,15 @@ fun ProfileHeaderNew(
     isLoading: Boolean,
     onImageClick: () -> Unit
 ) {
+    // ✅ Use global theme for dynamic colors
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
+
+    val textColor = if (isDarkMode) TextPrimary else TextPrimaryLight
+    val secondaryTextColor = if (isDarkMode) TextSecondary else TextSecondaryLight
+    val accentColor = if (isDarkMode) GreenAccent else GreenAccentLight
+    val cardBg = if (isDarkMode) CardDark else CardLight
+
     Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -216,8 +233,8 @@ fun ProfileHeaderNew(
             Box(
                 modifier = Modifier.fillMaxSize()
                     .clip(CircleShape)
-                    .border(3.dp, GreenAccent, CircleShape)
-                    .background(CardDark)
+                    .border(3.dp, accentColor, CircleShape)
+                    .background(cardBg)
             ) {
                 UserAvatar(
                     avatarUrl = avatarUrl,
@@ -227,7 +244,7 @@ fun ProfileHeaderNew(
             }
             Box(
                 modifier = Modifier.size(32.dp).align(Alignment.BottomEnd)
-                    .clip(CircleShape).background(GreenAccent).clickable { onImageClick() },
+                    .clip(CircleShape).background(accentColor).clickable { onImageClick() },
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.CameraAlt, "Change photo", tint = Color.White, modifier = Modifier.size(18.dp))
@@ -237,61 +254,70 @@ fun ProfileHeaderNew(
         Spacer(Modifier.height(12.dp))
 
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
-            StatItem(adventureCount, "aventures")
-            StatItem(followersCount, "followers")
-            StatItem(followingCount, "following")
+            StatItem(adventureCount, "aventures", textColor, secondaryTextColor)
+            StatItem(followersCount, "followers", textColor, secondaryTextColor)
+            StatItem(followingCount, "following", textColor, secondaryTextColor)
         }
 
         Spacer(Modifier.height(16.dp))
 
         if (isLoading) {
-            CircularProgressIndicator(Modifier.size(24.dp), color = GreenAccent, strokeWidth = 2.dp)
+            CircularProgressIndicator(Modifier.size(24.dp), color = accentColor, strokeWidth = 2.dp)
         } else {
-            Text(userName, color = TextPrimary, fontSize = 22.sp, fontWeight = FontWeight.Bold)
+            Text(userName, color = textColor, fontSize = 22.sp, fontWeight = FontWeight.Bold)
         }
 
         Spacer(Modifier.height(8.dp))
 
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("bike", fontSize = 14.sp)
+                Text("🚴", fontSize = 14.sp)
                 Spacer(Modifier.width(4.dp))
-                Text("Passionné de vélo et nature", color = TextSecondary, fontSize = 14.sp)
+                Text("Passionné de vélo et nature", color = secondaryTextColor, fontSize = 14.sp)
                 Spacer(Modifier.width(4.dp))
-                Text("mountain", fontSize = 14.sp)
+                Text("⛰️", fontSize = 14.sp)
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("mountain", fontSize = 14.sp)
+                Text("🏕️", fontSize = 14.sp)
                 Spacer(Modifier.width(4.dp))
-                Text("Explorateur d'aventures | Tunisie", color = TextSecondary, fontSize = 14.sp)
+                Text("Explorateur d'aventures | Tunisie", color = secondaryTextColor, fontSize = 14.sp)
             }
             Spacer(Modifier.height(4.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.LocationOn, null, tint = GreenAccent, modifier = Modifier.size(14.dp))
+                Icon(Icons.Default.LocationOn, null, tint = accentColor, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
-                Text(location, color = TextSecondary, fontSize = 14.sp)
+                Text(location, color = secondaryTextColor, fontSize = 14.sp)
                 Spacer(Modifier.width(4.dp))
-                Text("•", color = TextSecondary)
+                Text("•", color = secondaryTextColor)
                 Spacer(Modifier.width(4.dp))
-                Icon(Icons.Default.Explore, null, tint = GreenAccent, modifier = Modifier.size(14.dp))
+                Icon(Icons.Default.Explore, null, tint = accentColor, modifier = Modifier.size(14.dp))
                 Spacer(Modifier.width(4.dp))
-                Text("$adventureCount Adventures Created", color = TextSecondary, fontSize = 14.sp)
+                Text("$adventureCount Adventures Created", color = secondaryTextColor, fontSize = 14.sp)
             }
         }
     }
 }
 
 @Composable
-fun StatItem(count: Int, label: String) {
+fun StatItem(count: Int, label: String, textColor: Color, secondaryTextColor: Color) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(count.toString(), color = TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text(label, color = TextSecondary, fontSize = 12.sp)
+        Text(count.toString(), color = textColor, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text(label, color = secondaryTextColor, fontSize = 12.sp)
     }
 }
 
 @Composable
 fun ActionButtons(navController: NavHostController) {
+    // ✅ Use global theme for dynamic colors
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
+
+    val accentColor = if (isDarkMode) GreenAccent else GreenAccentLight
+    val tealColor = if (isDarkMode) TealAccent else GreenDarkLight
+    val cardGlass = if (isDarkMode) CardGlass else CardLightGlass
+    val borderColor = if (isDarkMode) BorderColor else BorderColorLight
+
     Row(
         Modifier
             .fillMaxWidth()
@@ -303,9 +329,9 @@ fun ActionButtons(navController: NavHostController) {
             onClick = { navController.navigate("edit_profile") },
             modifier = Modifier.weight(1f),
             shape = RoundedCornerShape(16.dp),
-            color = CardGlass,
+            color = cardGlass,
             shadowElevation = 4.dp,
-            border = androidx.compose.foundation.BorderStroke(1.5.dp, GreenAccent.copy(alpha = 0.3f))
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, accentColor.copy(alpha = 0.5f))
         ) {
             Row(
                 modifier = Modifier
@@ -313,8 +339,8 @@ fun ActionButtons(navController: NavHostController) {
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                GreenAccent.copy(alpha = 0.1f),
-                                TealAccent.copy(alpha = 0.05f)
+                                accentColor.copy(alpha = 0.15f),
+                                tealColor.copy(alpha = 0.08f)
                             )
                         )
                     )
@@ -325,13 +351,13 @@ fun ActionButtons(navController: NavHostController) {
                 Icon(
                     Icons.Default.Edit,
                     contentDescription = "Edit Profile",
-                    tint = GreenAccent,
+                    tint = accentColor,
                     modifier = Modifier.size(20.dp)
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
                     "Edit Profile",
-                    color = GreenAccent,
+                    color = accentColor,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
                 )

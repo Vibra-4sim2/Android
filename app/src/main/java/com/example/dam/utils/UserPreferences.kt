@@ -18,7 +18,16 @@ object UserPreferences {
 
     fun saveUserId(context: Context, userId: String) {
         getPrefs(context).edit().putString(KEY_USER_ID, userId).apply()
-        Log.d(TAG, "✅ Saved userId: $userId")
+        Log.d(TAG, "✅ Saved userId to cycle_app_prefs: $userId")
+
+        // ✅ ALSO save to auth_prefs for backwards compatibility
+        try {
+            val authPrefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+            authPrefs.edit().putString("user_id", userId).apply()
+            Log.d(TAG, "✅ Also saved userId to auth_prefs")
+        } catch (e: Exception) {
+            Log.e(TAG, "❌ Error saving userId to auth_prefs: ${e.message}")
+        }
     }
 
     fun getUserId(context: Context): String? {
@@ -26,12 +35,27 @@ object UserPreferences {
     }
 
     fun saveToken(context: Context, token: String) {
+        // Save to main preferences (cycle_app_prefs)
         getPrefs(context).edit().putString(KEY_TOKEN, token).apply()
-        Log.d(TAG, "✅ Saved token: ${token.take(30)}...")
+        Log.d(TAG, "✅ Saved token to cycle_app_prefs: ${token.take(30)}...")
 
         // Décoder automatiquement le token pour extraire le userId
         val userId = JwtHelper.getUserIdFromToken(token)
-        userId?.let { saveUserId(context, it) }
+        userId?.let {
+            saveUserId(context, it)
+
+            // ✅ ALSO save to auth_prefs for backwards compatibility
+            try {
+                val authPrefs = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+                authPrefs.edit()
+                    .putString("access_token", token)
+                    .putString("user_id", it)
+                    .apply()
+                Log.d(TAG, "✅ Also saved to auth_prefs for compatibility")
+            } catch (e: Exception) {
+                Log.e(TAG, "❌ Error saving to auth_prefs: ${e.message}")
+            }
+        }
 
         // Marquer que ce n'est plus la première utilisation
         setFirstLaunchComplete(context)

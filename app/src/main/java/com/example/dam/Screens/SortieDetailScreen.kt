@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -28,6 +29,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import coil.compose.AsyncImage
@@ -37,6 +39,7 @@ import com.example.dam.models.SortieResponse
 import com.example.dam.ui.theme.*
 import com.example.dam.utils.AvatarCache
 import com.example.dam.utils.UserAvatar
+import com.example.dam.viewmodel.FlaskAiViewModel
 import com.example.dam.viewmodel.ParticipationViewModel
 import com.example.dam.viewmodel.SortieDetailViewModel
 import com.google.android.gms.maps.CameraUpdateFactory
@@ -46,6 +49,7 @@ import com.google.android.gms.maps.model.LatLng
 import com.google.android.gms.maps.model.LatLngBounds
 import com.google.maps.android.compose.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
@@ -64,12 +68,79 @@ fun SortieDetailScreen(
     navController: NavController,
     sortieId: String,
     viewModel: SortieDetailViewModel = viewModel(),
-    participationViewModel: ParticipationViewModel = viewModel()
+    participationViewModel: ParticipationViewModel = viewModel(),
+    flaskAiViewModel: FlaskAiViewModel = viewModel()
 ) {
     val context = LocalContext.current
+
+    // ✅ COMPREHENSIVE TOKEN RETRIEVAL - Check all possible storage locations
     val sharedPref = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
-    val token = sharedPref.getString("access_token", "") ?: ""
-    val currentUserId = sharedPref.getString("user_id", "") ?: ""
+    val authToken = sharedPref.getString("access_token", "") ?: ""
+    val authUserId = sharedPref.getString("user_id", "") ?: ""
+
+    // Also check cycle_app_prefs directly
+    val cyclePrefs = context.getSharedPreferences("cycle_app_prefs", Context.MODE_PRIVATE)
+    val cycleToken = cyclePrefs.getString("auth_token", "") ?: ""
+    val cycleUserId = cyclePrefs.getString("user_id", "") ?: ""
+
+    // And check via UserPreferences helper
+    val userPrefToken = com.example.dam.utils.UserPreferences.getToken(context) ?: ""
+    val userPrefUserId = com.example.dam.utils.UserPreferences.getUserId(context) ?: ""
+
+    // Use the first non-empty token we find
+    val token = when {
+        authToken.isNotEmpty() -> {
+            Log.d("SortieDetailScreen", "✅ Using token from auth_prefs")
+            authToken
+        }
+        cycleToken.isNotEmpty() -> {
+            Log.d("SortieDetailScreen", "✅ Using token from cycle_app_prefs")
+            cycleToken
+        }
+        userPrefToken.isNotEmpty() -> {
+            Log.d("SortieDetailScreen", "✅ Using token from UserPreferences")
+            userPrefToken
+        }
+        else -> {
+            Log.e("SortieDetailScreen", "❌ NO TOKEN FOUND IN ANY LOCATION!")
+            ""
+        }
+    }
+
+    val currentUserId = when {
+        authUserId.isNotEmpty() -> authUserId
+        cycleUserId.isNotEmpty() -> cycleUserId
+        userPrefUserId.isNotEmpty() -> userPrefUserId
+        else -> ""
+    }
+
+    // Comprehensive debugging log
+    LaunchedEffect(Unit) {
+        Log.d("SortieDetailScreen", "========== TOKEN DEBUG ==========")
+
+        // Show all keys in auth_prefs
+        val authKeys = sharedPref.all.keys
+        Log.d("SortieDetailScreen", "auth_prefs keys: $authKeys")
+        Log.d("SortieDetailScreen", "auth_prefs.access_token: ${if (authToken.isNotEmpty()) authToken.take(30) + "..." else "EMPTY"}")
+        Log.d("SortieDetailScreen", "auth_prefs.user_id: ${if (authUserId.isNotEmpty()) authUserId else "EMPTY"}")
+
+        // Show all keys in cycle_app_prefs
+        val cycleKeys = cyclePrefs.all.keys
+        Log.d("SortieDetailScreen", "cycle_app_prefs keys: $cycleKeys")
+        Log.d("SortieDetailScreen", "cycle_app_prefs.auth_token: ${if (cycleToken.isNotEmpty()) cycleToken.take(30) + "..." else "EMPTY"}")
+        Log.d("SortieDetailScreen", "cycle_app_prefs.user_id: ${if (cycleUserId.isNotEmpty()) cycleUserId else "EMPTY"}")
+
+        // UserPreferences
+        Log.d("SortieDetailScreen", "UserPreferences.getToken(): ${if (userPrefToken.isNotEmpty()) userPrefToken.take(30) + "..." else "EMPTY"}")
+        Log.d("SortieDetailScreen", "UserPreferences.getUserId(): ${if (userPrefUserId.isNotEmpty()) userPrefUserId else "EMPTY"}")
+
+        // Final values
+        Log.d("SortieDetailScreen", "─────────────────────────────────")
+        Log.d("SortieDetailScreen", "FINAL token: ${if (token.isNotEmpty()) token.take(30) + "..." else "❌ EMPTY"}")
+        Log.d("SortieDetailScreen", "FINAL userId: ${if (currentUserId.isNotEmpty()) currentUserId else "❌ EMPTY"}")
+        Log.d("SortieDetailScreen", "Token available: ${token.isNotEmpty()}")
+        Log.d("SortieDetailScreen", "==================================")
+    }
 
     // ✅ ADD: SavedSortiesViewModel for save functionality
     val savedSortiesViewModel: com.example.dam.viewmodel.SavedSortiesViewModel = viewModel()
@@ -81,6 +152,12 @@ fun SortieDetailScreen(
     // ✅ ADD: Track saved state
     var isSaved by remember { mutableStateOf(false) }
     var showShareDialog by remember { mutableStateOf(false) }
+
+    // AI Analysis states
+    val sortieAnalysis by flaskAiViewModel.sortieAnalysis.collectAsState()
+    val analysisLoading by flaskAiViewModel.sortieAnalysisLoading.collectAsState()
+    val analysisError by flaskAiViewModel.sortieAnalysisError.collectAsState()
+    var showAnalysisDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(sortieId) {
         viewModel.loadSortieDetail(sortieId)
@@ -175,9 +252,48 @@ fun SortieDetailScreen(
                     hasJoined = hasJoined,
                     isCreator = viewModel.sortie!!.createurId.id == currentUserId,
                     isSaved = isSaved,
-                    onBackClick = { navController.popBackStack() },
+                    onBackClick = {
+                        Log.d("SortieDetailScreen", "========== BACK BUTTON CLICKED ==========")
+                        Log.d("SortieDetailScreen", "Current destination: ${navController.currentDestination?.route}")
+                        Log.d("SortieDetailScreen", "Previous back stack entry: ${navController.previousBackStackEntry?.destination?.route}")
+                        try {
+                            val result = navController.popBackStack()
+                            Log.d("SortieDetailScreen", "PopBackStack result: $result")
+                            if (!result) {
+                                Log.e("SortieDetailScreen", "❌ PopBackStack failed - no destination to pop to")
+                                // Fallback: navigate to home
+                                navController.navigate("home") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                                Log.d("SortieDetailScreen", "✅ Navigated to home as fallback")
+                            } else {
+                                Log.d("SortieDetailScreen", "✅ Successfully popped back stack")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("SortieDetailScreen", "❌ Error during navigation: ${e.message}", e)
+                            // Try fallback navigation on error
+                            try {
+                                navController.navigate("home") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                                Log.d("SortieDetailScreen", "✅ Navigated to home after error")
+                            } catch (e2: Exception) {
+                                Log.e("SortieDetailScreen", "❌ Fallback navigation also failed: ${e2.message}", e2)
+                            }
+                        }
+                        Log.d("SortieDetailScreen", "=========================================")
+                    },
                     onJoinClick = {
-                        participationViewModel.joinSortie(sortieId, token)
+                        Log.d("SortieDetailScreen", "Join button clicked, token available: ${token.isNotEmpty()}")
+                        if (token.isEmpty()) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Veuillez vous connecter pour rejoindre cette sortie",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            participationViewModel.joinSortie(sortieId, token)
+                        }
                     },
                     onManageRequestsClick = {
                         navController.navigate(NavigationRoutes.participationRequestsRoute(sortieId))
@@ -196,6 +312,18 @@ fun SortieDetailScreen(
                     onShareClick = {
                         showShareDialog = true
                     },
+                    onAnalyzeClick = {
+                        if (token.isEmpty()) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Veuillez vous connecter pour analyser cette sortie",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            flaskAiViewModel.loadPersonalizedSortieAnalysis(token, sortieId)
+                            showAnalysisDialog = true
+                        }
+                    },
                     navController = navController
                 )
 
@@ -204,6 +332,19 @@ fun SortieDetailScreen(
                     ShareSortieDialog(
                         sortie = viewModel.sortie!!,
                         onDismiss = { showShareDialog = false }
+                    )
+                }
+
+                // ✅ AI Analysis Dialog
+                if (showAnalysisDialog) {
+                    SortieAnalysisDialog(
+                        analysis = sortieAnalysis,
+                        isLoading = analysisLoading,
+                        error = analysisError,
+                        onDismiss = {
+                            showAnalysisDialog = false
+                            flaskAiViewModel.clearSortieAnalysis()
+                        }
                     )
                 }
             }
@@ -224,6 +365,7 @@ fun SortieDetailContent(
     onManageRequestsClick: () -> Unit = {},
     onSaveClick: () -> Unit = {},
     onShareClick: () -> Unit = {},
+    onAnalyzeClick: () -> Unit = {},
     navController: NavController
 ) {
     fun formatDate(dateString: String): String {
@@ -606,6 +748,39 @@ fun SortieDetailContent(
                     fontSize = 15.sp,
                     lineHeight = 22.sp
                 )
+            }
+
+            // AI Analysis Button
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clickable { onAnalyzeClick() },
+                shape = RoundedCornerShape(16.dp),
+                color = GreenAccent.copy(alpha = 0.15f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, GreenAccent)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI Analysis",
+                        tint = GreenAccent,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Analyse Personnalisée IA",
+                        color = GreenAccent,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
             }
 
             // CAMPING – BEAUTIFUL & VISIBLE
@@ -1085,6 +1260,7 @@ fun ShareSortieDialog(
     onDismiss: () -> Unit
 ) {
     val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     // Get user's discussions via MessagesViewModel
     val messagesViewModel = remember { com.example.dam.viewmodel.MessagesViewModel() }
@@ -1161,25 +1337,52 @@ fun ShareSortieDialog(
                                 sortieEmoji = chatGroup.emoji,
                                 onClick = {
                                     // Create structured share message with sortie data
-                                    val chatViewModel = com.example.dam.viewmodel.ChatViewModel()
                                     val shareMessage = "SHARED_SORTIE:${sortie.id}\nTITLE:${sortie.titre}\nCREATOR:${sortie.createurId.firstName ?: ""} ${sortie.createurId.lastName ?: ""}\nIMAGE:${sortie.photo ?: ""}\nDATE:${sortie.date}\nTYPE:${sortie.type}"
 
                                     // Debug log
-                                    android.util.Log.d("ShareSortie", "========================================")
-                                    android.util.Log.d("ShareSortie", "📤 Sharing sortie to chat: ${chatGroup.name}")
-                                    android.util.Log.d("ShareSortie", "Message to send:")
-                                    android.util.Log.d("ShareSortie", shareMessage)
-                                    android.util.Log.d("ShareSortie", "========================================")
+                                    Log.d("ShareSortie", "========================================")
+                                    Log.d("ShareSortie", "📤 Sharing sortie to chat: ${chatGroup.name}")
+                                    Log.d("ShareSortie", "Chat sortieId: ${chatGroup.sortieId}")
+                                    Log.d("ShareSortie", "Message to send:")
+                                    Log.d("ShareSortie", shareMessage)
+                                    Log.d("ShareSortie", "========================================")
 
-                                    // Send to chat
-                                    chatViewModel.sendTextMessage(chatGroup.sortieId, shareMessage, context)
+                                    // ✅ Send via MessageRepository to persist in database
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val messageDto = com.example.dam.models.CreateMessageDto(
+                                            type = com.example.dam.models.MessageType.TEXT,
+                                            content = shareMessage
+                                        )
 
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "Sortie partagée dans ${chatGroup.name}",
-                                        android.widget.Toast.LENGTH_SHORT
-                                    ).show()
-                                    onDismiss()
+                                        val token = com.example.dam.utils.UserPreferences.getToken(context)
+                                        if (token != null) {
+                                            val messageRepository = com.example.dam.repository.MessageRepository()
+                                            val result = messageRepository.sendMessage(
+                                                chatGroup.sortieId,
+                                                "Bearer $token",
+                                                messageDto
+                                            )
+
+                                            withContext(Dispatchers.Main) {
+                                                result.onSuccess {
+                                                    Log.d("ShareSortie", "✅ Message saved to database successfully")
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "Sortie partagée dans ${chatGroup.name}",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                    onDismiss()
+                                                }.onFailure { error ->
+                                                    Log.e("ShareSortie", "❌ Failed to share: ${error.message}")
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "Erreur lors du partage",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        }
+                                    }
                                 }
                             )
                         }
@@ -1252,6 +1455,443 @@ fun DiscussionCard(
                 tint = GreenAccent,
                 modifier = Modifier.size(20.dp)
             )
+        }
+    }
+}
+
+@Composable
+fun SortieAnalysisDialog(
+    analysis: com.example.dam.models.PersonalizedSortieAnalysisResponse?,
+    isLoading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardDark,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = GreenAccent
+                )
+                Text(
+                    text = "Analyse IA Personnalisée",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 600.dp)
+            ) {
+                when {
+                    isLoading -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(color = GreenAccent)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Analyse en cours...",
+                                color = TextSecondary,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                    error != null -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = ErrorRed,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = error,
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
+                    analysis != null -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Difficulty Analysis
+                            item {
+                                AnalysisSection(
+                                    title = "Niveau de Difficulté",
+                                    icon = Icons.Default.TrendingUp,
+                                    iconColor = when (analysis.analysis.difficultyLabel.uppercase()) {
+                                        "FACILE", "EASY" -> Color(0xFF4ADE80)
+                                        "MOYEN", "MEDIUM", "MODÉRÉ" -> Color(0xFFFBBF24)
+                                        "DIFFICILE", "HARD" -> Color(0xFFEF4444)
+                                        else -> GreenAccent
+                                    }
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = analysis.analysis.difficultyLabel,
+                                                color = TextPrimary,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "${(analysis.analysis.difficultyScore * 10).toInt()}/10",
+                                                color = GreenAccent,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        LinearProgressIndicator(
+                                            progress = { analysis.analysis.difficultyScore.toFloat() },
+                                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                                            color = when (analysis.analysis.difficultyLabel.uppercase()) {
+                                                "FACILE", "EASY" -> Color(0xFF4ADE80)
+                                                "MOYEN", "MEDIUM", "MODÉRÉ" -> Color(0xFFFBBF24)
+                                                "DIFFICILE", "HARD" -> Color(0xFFEF4444)
+                                                else -> GreenAccent
+                                            },
+                                            trackColor = CardGlass
+                                        )
+                                        InfoRow("Durée estimée", analysis.analysis.estimatedDuration)
+                                        InfoRow("Exigence physique", analysis.analysis.physicalDemand)
+                                        InfoRow("Exigence technique", analysis.analysis.technicalDemand)
+                                        InfoRow("Sensibilité météo", analysis.analysis.weatherSensitivity)
+                                        InfoRow("Meilleure saison", analysis.analysis.bestSeason)
+                                    }
+                                }
+                            }
+
+                            // Personalized Tips
+                            if (analysis.personalizedTips.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Conseils Personnalisés",
+                                        icon = Icons.Default.Lightbulb,
+                                        iconColor = Color(0xFFFBBF24)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            analysis.personalizedTips.forEach { tip ->
+                                                TipItem(tip, Color(0xFFFBBF24))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Safety Warnings
+                            if (analysis.safetyWarnings.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Avertissements de Sécurité",
+                                        icon = Icons.Default.Warning,
+                                        iconColor = Color(0xFFEF4444)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            analysis.safetyWarnings.forEach { warning ->
+                                                TipItem(warning, Color(0xFFEF4444))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Preparation Checklist
+                            if (analysis.preparationChecklist.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Liste de Préparation",
+                                        icon = Icons.Default.CheckCircle,
+                                        iconColor = Color(0xFF4ADE80)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            analysis.preparationChecklist.forEach { item ->
+                                                TipItem(item, Color(0xFF4ADE80))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Nutrition Tips
+                            if (analysis.nutritionTips.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Conseils Nutrition",
+                                        icon = Icons.Default.Restaurant,
+                                        iconColor = Color(0xFF10B981)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            analysis.nutritionTips.forEach { tip ->
+                                                TipItem(tip, Color(0xFF10B981))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Equipment Summary
+                            if (analysis.equipment.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Équipement Recommandé",
+                                        icon = Icons.Default.Backpack,
+                                        iconColor = Color(0xFF3B82F6)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            // Summary
+                                            Surface(
+                                                color = CardGlass,
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    EquipmentSummaryRow("Essentiel", analysis.equipmentSummary.essentialCount, Color(0xFFEF4444))
+                                                    EquipmentSummaryRow("Recommandé", analysis.equipmentSummary.recommendedCount, Color(0xFFFBBF24))
+                                                    EquipmentSummaryRow("Optionnel", analysis.equipmentSummary.optionalCount, Color(0xFF4ADE80))
+                                                    HorizontalDivider(color = BorderColor, thickness = 1.dp)
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("Coût estimé:", color = TextSecondary, fontSize = 12.sp)
+                                                        Text(
+                                                            analysis.equipmentSummary.totalEstimatedCost,
+                                                            color = GreenAccent,
+                                                            fontSize = 14.sp,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            // Equipment items
+                                            analysis.equipment.take(5).forEach { item ->
+                                                EquipmentCard(item)
+                                            }
+
+                                            if (analysis.equipment.size > 5) {
+                                                Text(
+                                                    text = "+ ${analysis.equipment.size - 5} autres équipements...",
+                                                    color = TextSecondary,
+                                                    fontSize = 12.sp,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = GreenAccent)
+            ) {
+                Text("Fermer")
+            }
+        }
+    )
+}
+
+@Composable
+fun AnalysisSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: Color = GreenAccent,
+    content: @Composable () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = title,
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Surface(
+            color = CardGlass,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "$label:",
+            color = TextSecondary,
+            fontSize = 13.sp
+        )
+        Text(
+            text = value,
+            color = TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+fun TipItem(text: String, color: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .background(color, CircleShape)
+                .padding(top = 6.dp)
+        )
+        Text(
+            text = text,
+            color = TextPrimary,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun EquipmentSummaryRow(label: String, count: Int, color: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(color, CircleShape)
+            )
+            Text(text = label, color = TextSecondary, fontSize = 12.sp)
+        }
+        Text(
+            text = count.toString(),
+            color = TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+fun EquipmentCard(item: com.example.dam.models.EquipmentItem) {
+    Surface(
+        color = CardDark,
+        shape = RoundedCornerShape(8.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            when (item.necessity.uppercase()) {
+                "ESSENTIAL", "ESSENTIEL" -> Color(0xFFEF4444)
+                "RECOMMENDED", "RECOMMANDÉ" -> Color(0xFFFBBF24)
+                else -> Color(0xFF4ADE80)
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.name,
+                    color = TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = item.category,
+                    color = TextSecondary,
+                    fontSize = 11.sp
+                )
+                if (item.priceRange != null) {
+                    Text(
+                        text = item.priceRange,
+                        color = GreenAccent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+            Surface(
+                color = when (item.necessity.uppercase()) {
+                    "ESSENTIAL", "ESSENTIEL" -> Color(0xFFEF4444).copy(alpha = 0.2f)
+                    "RECOMMENDED", "RECOMMANDÉ" -> Color(0xFFFBBF24).copy(alpha = 0.2f)
+                    else -> Color(0xFF4ADE80).copy(alpha = 0.2f)
+                },
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(
+                    text = when (item.necessity.uppercase()) {
+                        "ESSENTIAL", "ESSENTIEL" -> "Essential"
+                        "RECOMMENDED", "RECOMMANDÉ" -> "Recommandé"
+                        else -> "Optionnel"
+                    },
+                    color = when (item.necessity.uppercase()) {
+                        "ESSENTIAL", "ESSENTIEL" -> Color(0xFFEF4444)
+                        "RECOMMENDED", "RECOMMANDÉ" -> Color(0xFFFBBF24)
+                        else -> Color(0xFF4ADE80)
+                    },
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                )
+            }
         }
     }
 }

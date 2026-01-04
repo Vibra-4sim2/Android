@@ -1,6 +1,7 @@
 package com.example.dam.Screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -8,13 +9,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -22,19 +24,20 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
+import com.example.dam.ui.theme.*
 import com.example.dam.utils.UserPreferences
 import com.example.dam.viewmodel.UserViewModel
 
-// Colors
-private val BackgroundColor = Color(0xFF0F0F0F)
-private val SecondaryTextColor = Color(0xFFBDBDBD)
-private val AccentGreen = Color(0xFF4ADE80)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditProfile1Screen(navController: NavHostController) {
     val context = LocalContext.current
     val viewModel: UserViewModel = viewModel()
+
+    // ✅ Use global theme state
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
 
     // ✅ Get stored auth data from UserPreferences (SINGLE SOURCE OF TRUTH)
     val token = UserPreferences.getToken(context) ?: ""
@@ -81,7 +84,15 @@ fun EditProfile1Screen(navController: NavHostController) {
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(BackgroundColor)
+            .background(
+                Brush.verticalGradient(
+                    colors = if (isDarkMode) {
+                        listOf(BackgroundGradientStart, BackgroundDark, BackgroundGradientEnd)
+                    } else {
+                        listOf(BackgroundLightGradientStart, BackgroundLight, BackgroundLightGradientEnd)
+                    }
+                )
+            )
     ) {
         Column(
             modifier = Modifier
@@ -94,29 +105,46 @@ fun EditProfile1Screen(navController: NavHostController) {
         ) {
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Close Button
-            IconButton(
-                onClick = {
-                    navController.navigate("profile") {
-                        popUpTo("profile") { inclusive = true }
-                    }
-                },
-                modifier = Modifier.padding(bottom = 16.dp)
+            // ✅ Back Button with modern design
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 20.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Default.Close,
-                    contentDescription = "Close",
-                    tint = Color.White
+                IconButton(
+                    onClick = {
+                        navController.popBackStack()
+                    },
+                    modifier = Modifier
+                        .size(42.dp)
+                        .background(
+                            color = CardGlass,
+                            shape = CircleShape
+                        )
+                        .border(
+                            width = 1.5.dp,
+                            color = BorderColor,
+                            shape = CircleShape
+                        )
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = TextPrimary,
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(12.dp))
+
+                Text(
+                    text = "Edit Profile",
+                    color = TextPrimary,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
 
-            Text(
-                text = "Edit Profile",
-                color = Color.White,
-                fontSize = 28.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(bottom = 32.dp)
-            )
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Show loading indicator
             if (isLoading) {
@@ -126,7 +154,7 @@ fun EditProfile1Screen(navController: NavHostController) {
                         .padding(vertical = 16.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(color = AccentGreen)
+                    CircularProgressIndicator(color = GreenAccent)
                 }
             }
 
@@ -164,22 +192,22 @@ fun EditProfile1Screen(navController: NavHostController) {
             OutlinedTextField(
                 value = gender,
                 onValueChange = { gender = it },
-                placeholder = { Text(text = "Select gender", color = SecondaryTextColor) },
-                textStyle = LocalTextStyle.current.copy(color = Color.White),
+                placeholder = { Text(text = "Select gender", color = TextSecondary) },
+                textStyle = LocalTextStyle.current.copy(color = TextPrimary),
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color.White,
-                    unfocusedTextColor = Color.White,
-                    focusedBorderColor = AccentGreen,
-                    unfocusedBorderColor = SecondaryTextColor,
-                    cursorColor = AccentGreen,
-                    disabledTextColor = SecondaryTextColor,
-                    disabledBorderColor = SecondaryTextColor.copy(alpha = 0.5f),
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent
+                    focusedTextColor = TextPrimary,
+                    unfocusedTextColor = TextPrimary,
+                    focusedBorderColor = GreenAccent,
+                    unfocusedBorderColor = BorderColor,
+                    cursorColor = GreenAccent,
+                    disabledTextColor = TextSecondary,
+                    disabledBorderColor = BorderColor.copy(alpha = 0.5f),
+                    focusedContainerColor = CardGlass.copy(alpha = 0.3f),
+                    unfocusedContainerColor = CardGlass.copy(alpha = 0.2f)
                 ),
                 enabled = !isLoading
             )
@@ -195,13 +223,15 @@ fun EditProfile1Screen(navController: NavHostController) {
                     modifier = Modifier
                         .size(56.dp)
                         .shadow(
-                            elevation = 8.dp,
+                            elevation = 12.dp,
                             shape = CircleShape,
-                            ambientColor = AccentGreen.copy(alpha = 0.3f),
-                            spotColor = AccentGreen.copy(alpha = 0.5f)
+                            ambientColor = GreenAccent.copy(alpha = 0.4f),
+                            spotColor = GreenAccent.copy(alpha = 0.6f)
                         )
                         .background(
-                            color = AccentGreen,
+                            brush = Brush.radialGradient(
+                                colors = listOf(GreenLight, GreenAccent)
+                            ),
                             shape = CircleShape
                         )
                         .clickable(
@@ -216,7 +246,9 @@ fun EditProfile1Screen(navController: NavHostController) {
                                 gender = gender,
                                 email = email,
                                 onSuccess = {
-                                    navController.navigate("profile") {}
+                                    navController.navigate("profile") {
+                                        popUpTo("profile") { inclusive = true }
+                                    }
                                 },
                                 onError = { error ->
                                     println("Update failed: $error")
@@ -251,7 +283,7 @@ fun EditProfile1Screen(navController: NavHostController) {
 private fun Label(text: String) {
     Text(
         text = text,
-        color = SecondaryTextColor,
+        color = TextSecondary,
         fontSize = 13.sp,
         fontWeight = FontWeight.Medium,
         modifier = Modifier.padding(bottom = 6.dp)
@@ -268,23 +300,23 @@ private fun RoundedInputField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        placeholder = { Text(text = hint, color = SecondaryTextColor) },
+        placeholder = { Text(text = hint, color = TextSecondary) },
         singleLine = true,
-        textStyle = LocalTextStyle.current.copy(color = Color.White),
+        textStyle = LocalTextStyle.current.copy(color = TextPrimary),
         modifier = Modifier
             .fillMaxWidth()
             .height(56.dp),
         shape = RoundedCornerShape(12.dp),
         colors = OutlinedTextFieldDefaults.colors(
-            focusedTextColor = Color.White,
-            unfocusedTextColor = Color.White,
-            focusedBorderColor = AccentGreen,
-            unfocusedBorderColor = SecondaryTextColor,
-            cursorColor = AccentGreen,
-            disabledTextColor = SecondaryTextColor,
-            disabledBorderColor = SecondaryTextColor.copy(alpha = 0.5f),
-            focusedContainerColor = Color.Transparent,
-            unfocusedContainerColor = Color.Transparent
+            focusedTextColor = TextPrimary,
+            unfocusedTextColor = TextPrimary,
+            focusedBorderColor = GreenAccent,
+            unfocusedBorderColor = BorderColor,
+            cursorColor = GreenAccent,
+            disabledTextColor = TextSecondary,
+            disabledBorderColor = BorderColor.copy(alpha = 0.5f),
+            focusedContainerColor = CardGlass.copy(alpha = 0.3f),
+            unfocusedContainerColor = CardGlass.copy(alpha = 0.2f)
         ),
         enabled = enabled
     )

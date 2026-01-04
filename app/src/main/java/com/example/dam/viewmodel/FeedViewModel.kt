@@ -80,26 +80,26 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
 
             val result = repository.likePublication(publicationId)
 
-            result.fold(
-                onSuccess = { updatedPublication ->
+            if (result.isSuccess) {
+                val likeResponse = result.getOrNull()
+                if (likeResponse != null) {
                     Log.d(TAG, "✅ Like toggled successfully")
 
-                    // Mettre à jour la publication dans la liste
+                    // Mettre à jour seulement les champs de like dans la publication existante
                     _publications.value = _publications.value.map { pub ->
                         if (pub.id == publicationId) {
                             pub.copy(
-                                likesCount = updatedPublication.likesCount,
-                                likedBy = updatedPublication.likedBy
+                                likesCount = likeResponse.likesCount,
+                                likedBy = likeResponse.likedBy
                             )
                         } else {
                             pub
                         }
                     }
-                },
-                onFailure = { error ->
-                    Log.e(TAG, "❌ Failed to toggle like", error)
                 }
-            )
+            } else {
+                Log.e(TAG, "❌ Failed to toggle like: ${result.exceptionOrNull()?.message}")
+            }
         }
     }
 

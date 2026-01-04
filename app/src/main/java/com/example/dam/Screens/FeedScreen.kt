@@ -1,6 +1,7 @@
 package com.example.dam.Screens
 
 import android.app.Application
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -302,8 +303,10 @@ fun PostCard(
     onShareClick: () -> Unit = {},
     onMenuClick: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var localIsLiked by remember { mutableStateOf(isLiked) }
     var localLikesCount by remember { mutableStateOf(publication.likesCount) }
+    var showShareDialog by remember { mutableStateOf(false) }
 
     Surface(
         modifier = Modifier
@@ -434,6 +437,56 @@ fun PostCard(
                     }
                 }
 
+                // ========== MENTIONS ==========
+                if (!publication.mentions.isNullOrEmpty()) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        publication.mentions.take(3).forEach { mention ->
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF3B82F6).copy(alpha = 0.15f),
+                                border = BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.AlternateEmail,
+                                        contentDescription = null,
+                                        tint = Color(0xFF3B82F6),
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        text = "${mention.firstName} ${mention.lastName}",
+                                        color = Color(0xFF3B82F6),
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
+                            }
+                        }
+                        // Show "and X more" if there are more mentions
+                        if (publication.mentions.size > 3) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = Color(0xFF3B82F6).copy(alpha = 0.1f)
+                            ) {
+                                Text(
+                                    text = "+${publication.mentions.size - 3} more",
+                                    color = Color(0xFF3B82F6),
+                                    fontSize = 12.sp,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // ========== LOCATION ==========
                 if (!publication.location.isNullOrEmpty()) {
                     Spacer(modifier = Modifier.height(8.dp))
@@ -523,11 +576,19 @@ fun PostCard(
                         icon = Icons.Outlined.Share,
                         label = "Share",
                         tint = TextSecondary,
-                        onClick = onShareClick
+                        onClick = { showShareDialog = true }
                     )
                 }
             }
         }
+    }
+
+    // ✅ Share Dialog
+    if (showShareDialog) {
+        SharePublicationDialog(
+            publication = publication,
+            onDismiss = { showShareDialog = false }
+        )
     }
 }
 
@@ -668,6 +729,190 @@ private fun ErrorState(
             ) {
                 Text("Retry")
             }
+        }
+    }
+}
+
+// ==================== SHARE PUBLICATION DIALOG ====================
+@Composable
+fun SharePublicationDialog(
+    publication: PublicationResponse,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val messagesViewModel: com.example.dam.viewmodel.MessagesViewModel = viewModel(
+        factory = object : ViewModelProvider.Factory {
+            override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+                @Suppress("UNCHECKED_CAST")
+                return com.example.dam.viewmodel.MessagesViewModel() as T
+            }
+        }
+    )
+    val chatGroups by messagesViewModel.chatGroups.collectAsState()
+
+    LaunchedEffect(Unit) {
+        messagesViewModel.loadUserChats(context)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = null,
+                    tint = GreenAccent
+                )
+                Text(
+                    "Partager dans une discussion",
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Sélectionnez une discussion:",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+
+                if (chatGroups.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = GreenAccent,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Text(
+                                "Chargement...",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(chatGroups.size) { index ->
+                            val chatGroup = chatGroups[index]
+                            PublicationShareCard(
+                                chatName = chatGroup.name,
+                                chatEmoji = chatGroup.emoji,
+                                onClick = {
+                                    // Create structured share message with publication data
+                                    val chatViewModel = com.example.dam.viewmodel.ChatViewModel()
+                                    val authorName = "${publication.author?.firstName ?: ""} ${publication.author?.lastName ?: ""}".trim()
+                                    val shareMessage = "SHARED_PUBLICATION:${publication.id}\nAUTHOR:$authorName\nCONTENT:${publication.content}\nIMAGE:${publication.image ?: ""}\nDATE:${publication.createdAt}"
+
+                                    // Debug log
+                                    android.util.Log.d("SharePublication", "========================================")
+                                    android.util.Log.d("SharePublication", "📤 Sharing publication to chat: ${chatGroup.name}")
+                                    android.util.Log.d("SharePublication", "Message to send:")
+                                    android.util.Log.d("SharePublication", shareMessage)
+                                    android.util.Log.d("SharePublication", "========================================")
+
+                                    // Send to chat
+                                    chatViewModel.sendTextMessage(chatGroup.sortieId, shareMessage, context)
+
+                                    android.widget.Toast.makeText(
+                                        context,
+                                        "Publication partagée dans ${chatGroup.name}",
+                                        android.widget.Toast.LENGTH_SHORT
+                                    ).show()
+                                    onDismiss()
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Annuler", color = TextSecondary)
+            }
+        },
+        containerColor = CardBackground,
+        titleContentColor = TextPrimary,
+        textContentColor = TextSecondary,
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+@Composable
+fun PublicationShareCard(
+    chatName: String,
+    chatEmoji: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = CardBackground.copy(alpha = 0.6f),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardBackground.copy(alpha = 0.4f))
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(GreenAccent.copy(alpha = 0.2f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = chatEmoji,
+                    fontSize = 20.sp
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = chatName,
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                Text(
+                    text = "Discussion de groupe",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.Send,
+                contentDescription = "Share",
+                tint = GreenAccent,
+                modifier = Modifier.size(20.dp)
+            )
         }
     }
 }

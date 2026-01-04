@@ -64,6 +64,7 @@ class HomeExploreViewModel : ViewModel() {
         }
     }
 
+
     fun getFilteredSorties(): List<SortieResponse> {
         var filtered = sorties
 
@@ -71,7 +72,7 @@ class HomeExploreViewModel : ViewModel() {
         filtered = when (selectedFilter) {
             "cycling" -> filtered.filter { it.type == "VELO" }
             "hiking" -> filtered.filter { it.type == "RANDONNEE" }
-            "camping" -> filtered.filter { it.optionCamping == true }  // ✅ MODIFIÉ : filtre par option camping
+            "camping" -> filtered.filter { it.optionCamping == true }
             else -> filtered
         }
 

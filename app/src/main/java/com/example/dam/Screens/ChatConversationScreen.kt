@@ -24,6 +24,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
@@ -65,6 +66,11 @@ fun ChatConversationScreen(
     var messageText by remember { mutableStateOf(TextFieldValue("")) }
     var showAttachmentOptions by remember { mutableStateOf(false) }
     var showPollDialog by remember { mutableStateOf(false) }
+
+    // ✅ Mention system states
+    var showMemberList by remember { mutableStateOf(false) }
+    var mentionStartPosition by remember { mutableIntStateOf(-1) }
+    val groupMembers = remember { mutableStateOf<List<com.example.dam.models.UserProfileResponse>>(emptyList()) }
     // États du ViewModel
     val messages by viewModel.messages.collectAsState()
     val polls by viewModel.polls.collectAsState()
@@ -262,6 +268,79 @@ fun ChatConversationScreen(
         // ✅ IMPORTANT: Mark messages as read immediately when entering chat
         android.util.Log.d("ChatConversationScreen", "📖 Marking all messages as read on entry...")
         viewModel.markAllMessagesAsRead(sortieId, context)
+
+        // ✅ Load sortie participants for mentions
+        android.util.Log.d("ChatConversationScreen", "👥 Loading sortie participants...")
+        try {
+            val token = com.example.dam.utils.UserPreferences.getToken(context)
+            if (token != null) {
+                // Step 1: Get sortie details
+                val sortieResponse = com.example.dam.remote.RetrofitInstance.adventureApi.getSortieById(sortieId)
+                if (sortieResponse.isSuccessful && sortieResponse.body() != null) {
+                    val sortie = sortieResponse.body()!!
+
+                    // Step 2: Collect all participant user IDs (including creator)
+                    val participantUserIds = mutableSetOf<String>()
+
+                    // Add creator
+                    participantUserIds.add(sortie.createurId.id)
+
+                    // Add all participants with status "ACCEPTED" or "PENDING"
+                    sortie.participants.forEach { participant ->
+                        participant.userId?.let { userId ->
+                            if (participant.status == "ACCEPTED" || participant.status == "PENDING") {
+                                participantUserIds.add(userId)
+                            }
+                        }
+                    }
+
+                    android.util.Log.d("ChatConversationScreen", "📋 Found ${participantUserIds.size} participant IDs")
+
+                    // Step 3: Fetch user details for each participant
+                    val usersList = mutableListOf<com.example.dam.models.UserProfileResponse>()
+
+                    participantUserIds.forEach { userId ->
+                        try {
+                            val userResponse = com.example.dam.remote.RetrofitInstance.authApi.getUserById(userId, "Bearer $token")
+                            if (userResponse.isSuccessful && userResponse.body() != null) {
+                                usersList.add(userResponse.body()!!)
+                                android.util.Log.d("ChatConversationScreen", "   ✅ Loaded: ${userResponse.body()!!.firstName} ${userResponse.body()!!.lastName}")
+                            }
+                        } catch (e: Exception) {
+                            android.util.Log.e("ChatConversationScreen", "   ❌ Error loading user $userId: ${e.message}")
+                        }
+                    }
+
+                    groupMembers.value = usersList
+                    android.util.Log.d("ChatConversationScreen", "✅ Loaded ${usersList.size} participants for mentions")
+                } else {
+                    android.util.Log.e("ChatConversationScreen", "❌ Failed to load sortie: ${sortieResponse.code()}")
+                }
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("ChatConversationScreen", "❌ Error loading participants: ${e.message}", e)
+        }
+    }
+
+    // ✅ Monitor text changes for @ detection
+    LaunchedEffect(messageText.text) {
+        val text = messageText.text
+        val lastAtIndex = text.lastIndexOf('@')
+
+        if (lastAtIndex >= 0) {
+            val beforeAt = if (lastAtIndex > 0) text[lastAtIndex - 1] else ' '
+            val isValidStart = beforeAt == ' ' || lastAtIndex == 0
+
+            if (isValidStart) {
+                showMemberList = groupMembers.value.isNotEmpty()
+                mentionStartPosition = lastAtIndex
+                android.util.Log.d("ChatMention", "✅ @ detected at position $lastAtIndex, showing ${groupMembers.value.size} members")
+            } else {
+                showMemberList = false
+            }
+        } else {
+            showMemberList = false
+        }
     }
 
     // ✅ CLEANUP: Clear opened state when leaving chat
@@ -870,6 +949,93 @@ fun ChatConversationScreen(
             }
         }
 
+        // ✅ Member mention popup
+        if (showMemberList && groupMembers.value.isNotEmpty()) {
+            android.util.Log.d("ChatMention", "🎨 Rendering popup with ${groupMembers.value.size} members")
+
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 80.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 200.dp)
+                        .padding(horizontal = 16.dp)
+                        .background(
+                            color = Color(0xFF2A2A2A),
+                            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                        )
+                        .border(
+                            width = 2.dp,
+                            color = Color(0xFF3B82F6),
+                            shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                        )
+                        .padding(vertical = 8.dp)
+                ) {
+                    items(groupMembers.value.size) { index ->
+                        val member = groupMembers.value[index]
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    val beforeMention = messageText.text.substring(0, mentionStartPosition)
+                                    val afterMention = messageText.text.substring(mentionStartPosition + 1)
+                                    val newText = "$beforeMention@${member.firstName} ${member.lastName} $afterMention"
+                                    messageText = TextFieldValue(
+                                        text = newText,
+                                        selection = TextRange(newText.length)
+                                    )
+                                    showMemberList = false
+                                    android.util.Log.d("ChatMention", "👤 Selected: ${member.firstName} ${member.lastName}")
+                                }
+                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Avatar
+                            if (!member.avatar.isNullOrEmpty()) {
+                                AsyncImage(
+                                    model = member.avatar,
+                                    contentDescription = "Avatar",
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF3B82F6).copy(alpha = 0.2f)),
+                                    contentScale = ContentScale.Crop
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF3B82F6).copy(alpha = 0.3f)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "${member.firstName.firstOrNull()?.uppercaseChar() ?: ""}${member.lastName.firstOrNull()?.uppercaseChar() ?: ""}",
+                                        color = Color.White,
+                                        fontSize = 16.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            Text(
+                                text = "${member.firstName} ${member.lastName}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
         // ✅ Snackbar pour les messages d'erreur/succès
         SnackbarHost(
             hostState = snackbarHostState,
@@ -1019,8 +1185,9 @@ fun ChatMessageBubble(
                         )
                     }
 
-                    // ✅ SHARED SORTIE CARD - Check if message contains shared sortie
+                    // ✅ SHARED SORTIE/PUBLICATION CARD - Check if message contains shared content
                     val isSharedSortie = message.content?.startsWith("SHARED_SORTIE:") == true
+                    val isSharedPublication = message.content?.startsWith("SHARED_PUBLICATION:") == true
 
                     // DEBUG LOGGING
                     if (message.content != null) {
@@ -1028,95 +1195,107 @@ fun ChatMessageBubble(
                         android.util.Log.d("ChatCard", "Message ID: ${message.id}")
                         android.util.Log.d("ChatCard", "Message content preview: ${message.content.take(100)}")
                         android.util.Log.d("ChatCard", "Starts with SHARED_SORTIE: $isSharedSortie")
+                        android.util.Log.d("ChatCard", "Starts with SHARED_PUBLICATION: $isSharedPublication")
                         android.util.Log.d("ChatCard", "========================================")
                     }
 
+                    // ✅ Render SharedSortieCard if it's a shared sortie
                     if (isSharedSortie && message.content != null) {
                         SharedSortieCard(
                             messageContent = message.content,
-                            navController = navController,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            navController = navController
                         )
                     }
 
-                    // Text content
-                    if (!message.content.isNullOrEmpty() && message.type != MessageType.AUDIO && !isSharedSortie) {
-                        Row(
-                            modifier = Modifier.padding(
-                                start = 12.dp,
-                                end = 12.dp,
-                                top = if (message.imageUrl != null) 8.dp else 10.dp,
-                                bottom = 10.dp
-                            ),
-                            verticalAlignment = Alignment.Bottom
-                        ) {
-                            Text(
-                                text = message.content,
-                                color = Color.White,
-                                fontSize = 14.sp,
-                                lineHeight = 20.sp,
-                                modifier = Modifier.weight(1f, fill = false)
-                            )
-                            Spacer(modifier = Modifier.width(8.dp))
+                    // ✅ Render SharedPublicationCard if it's a shared publication
+                    if (isSharedPublication && message.content != null) {
+                        SharedPublicationCard(
+                            messageContent = message.content,
+                            navController = navController
+                        )
+                    }
+
+                        // Text content (but NOT for shared content)
+                        if (!message.content.isNullOrEmpty() &&
+                            message.type != MessageType.AUDIO &&
+                            !isSharedSortie &&
+                            !isSharedPublication) {
                             Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                modifier = Modifier.padding(
+                                    start = 12.dp,
+                                    end = 12.dp,
+                                    top = if (message.imageUrl != null) 8.dp else 10.dp,
+                                    bottom = 10.dp
+                                ),
+                                verticalAlignment = Alignment.Bottom
+                            ) {
+                                Text(
+                                    text = message.content,
+                                    color = Color.White,
+                                    fontSize = 14.sp,
+                                    lineHeight = 20.sp,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = message.time,
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        fontSize = 11.sp
+                                    )
+                                    if (message.isMe) {
+                                        Icon(
+                                            when (message.status) {
+                                                MessageStatus.SENDING -> Icons.Default.Schedule
+                                                MessageStatus.SENT -> Icons.Default.Done
+                                                MessageStatus.DELIVERED, MessageStatus.READ -> Icons.Default.DoneAll
+                                                MessageStatus.FAILED -> Icons.Default.Error
+                                            },
+                                            contentDescription = "Status",
+                                            tint = when (message.status) {
+                                                MessageStatus.READ -> Color(0xFF53bdeb)
+                                                MessageStatus.FAILED -> Color.Red
+                                                else -> Color.White.copy(alpha = 0.6f)
+                                            },
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        } else if (message.imageUrl != null) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.End,
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
                                     text = message.time,
-                                    color = Color.White.copy(alpha = 0.6f),
+                                    color = Color.White.copy(alpha = 0.8f),
                                     fontSize = 11.sp
                                 )
                                 if (message.isMe) {
+                                    Spacer(modifier = Modifier.width(4.dp))
                                     Icon(
-                                        when (message.status) {
-                                            MessageStatus.SENDING -> Icons.Default.Schedule
-                                            MessageStatus.SENT -> Icons.Default.Done
-                                            MessageStatus.DELIVERED, MessageStatus.READ -> Icons.Default.DoneAll
-                                            MessageStatus.FAILED -> Icons.Default.Error
-                                        },
+                                        Icons.Default.DoneAll,
                                         contentDescription = "Status",
-                                        tint = when (message.status) {
-                                            MessageStatus.READ -> Color(0xFF53bdeb)
-                                            MessageStatus.FAILED -> Color.Red
-                                            else -> Color.White.copy(alpha = 0.6f)
-                                        },
+                                        tint = if (message.status == MessageStatus.READ)
+                                            Color(0xFF53bdeb)
+                                        else
+                                            Color.White.copy(alpha = 0.6f),
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
-                            }
-                        }
-                    } else if (message.imageUrl != null) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                            horizontalArrangement = Arrangement.End,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = message.time,
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 11.sp
-                            )
-                            if (message.isMe) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Icon(
-                                    Icons.Default.DoneAll,
-                                    contentDescription = "Status",
-                                    tint = if (message.status == MessageStatus.READ)
-                                        Color(0xFF53bdeb)
-                                    else
-                                        Color.White.copy(alpha = 0.6f),
-                                    modifier = Modifier.size(16.dp)
-                                )
                             }
                         }
                     }
                 }
             }
         }
-    }
 }
 
 @Composable
@@ -1239,13 +1418,33 @@ fun SharedSortieCard(
 ) {
     // Parse the shared sortie data
     val lines = messageContent.split("\n")
-    val sortieId = lines.find { it.startsWith("SHARED_SORTIE:") }?.substringAfter(":")?.trim() ?: ""
+
+    // ✅ Handle both formats:
+    // 1. Simple format: "SHARED_SORTIE:sortieId"
+    // 2. Detailed format: "SHARED_SORTIE:sortieId\nTITLE:...\nCREATOR:..."
+    val sortieId = if (lines.isNotEmpty()) {
+        val firstLine = lines[0]
+        if (firstLine.startsWith("SHARED_SORTIE:")) {
+            firstLine.substringAfter("SHARED_SORTIE:").trim()
+        } else {
+            lines.find { it.startsWith("SHARED_SORTIE:") }?.substringAfter(":")?.trim() ?: ""
+        }
+    } else {
+        ""
+    }
+
     val title = lines.find { it.startsWith("TITLE:") }?.substringAfter(":")?.trim() ?: "Sortie partagée"
     val creator = lines.find { it.startsWith("CREATOR:") }?.substringAfter(":")?.trim() ?: "Utilisateur"
     val imageUrl = lines.find { it.startsWith("IMAGE:") }?.substringAfter(":")?.trim() ?: ""
     val type = lines.find { it.startsWith("TYPE:") }?.substringAfter(":")?.trim() ?: ""
 
-    android.util.Log.d("SharedSortieCard", "🔗 Sortie ID to navigate: $sortieId")
+    android.util.Log.d("SharedSortieCard", "========================================")
+    android.util.Log.d("SharedSortieCard", "📦 Parsing shared sortie message")
+    android.util.Log.d("SharedSortieCard", "Message content: $messageContent")
+    android.util.Log.d("SharedSortieCard", "Parsed sortieId: $sortieId")
+    android.util.Log.d("SharedSortieCard", "Parsed title: $title")
+    android.util.Log.d("SharedSortieCard", "Parsed creator: $creator")
+    android.util.Log.d("SharedSortieCard", "========================================")
 
     Surface(
         onClick = {
@@ -1378,6 +1577,177 @@ fun SharedSortieCard(
                 imageVector = Icons.Default.ArrowForward,
                 contentDescription = "View",
                 tint = Color(0xFF4ADE80),
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+// ✅ Shared Publication Card Component
+@Composable
+fun SharedPublicationCard(
+    messageContent: String,
+    navController: NavHostController,
+    modifier: Modifier = Modifier
+) {
+    // Parse the shared publication data
+    val lines = messageContent.split("\n")
+
+    // ✅ Handle both formats:
+    // 1. Simple format: "SHARED_PUBLICATION:publicationId"
+    // 2. Detailed format: "SHARED_PUBLICATION:publicationId\nAUTHOR:...\nCONTENT:..."
+    val publicationId = if (lines.isNotEmpty()) {
+        val firstLine = lines[0]
+        if (firstLine.startsWith("SHARED_PUBLICATION:")) {
+            firstLine.substringAfter("SHARED_PUBLICATION:").trim()
+        } else {
+            lines.find { it.startsWith("SHARED_PUBLICATION:") }?.substringAfter(":")?.trim() ?: ""
+        }
+    } else {
+        ""
+    }
+
+    val author = lines.find { it.startsWith("AUTHOR:") }?.substringAfter(":")?.trim() ?: "Utilisateur"
+    val content = lines.find { it.startsWith("CONTENT:") }?.substringAfter(":")?.trim() ?: ""
+    val imageUrl = lines.find { it.startsWith("IMAGE:") }?.substringAfter(":")?.trim() ?: ""
+    val date = lines.find { it.startsWith("DATE:") }?.substringAfter(":")?.trim() ?: ""
+
+    android.util.Log.d("SharedPublicationCard", "========================================")
+    android.util.Log.d("SharedPublicationCard", "📦 Parsing shared publication message")
+    android.util.Log.d("SharedPublicationCard", "Message content: $messageContent")
+    android.util.Log.d("SharedPublicationCard", "Parsed publicationId: $publicationId")
+    android.util.Log.d("SharedPublicationCard", "Parsed author: $author")
+    android.util.Log.d("SharedPublicationCard", "Parsed content: $content")
+    android.util.Log.d("SharedPublicationCard", "========================================")
+
+    Surface(
+        onClick = {
+            if (publicationId.isNotEmpty()) {
+                android.util.Log.d("SharedPublicationCard", "📍 Navigating to feed (publication shared)")
+                try {
+                    // Navigate to feed screen where publications are displayed
+                    navController.navigate("feed") {
+                        launchSingleTop = true
+                        popUpTo(navController.graph.startDestinationId) {
+                            saveState = true
+                        }
+                        restoreState = true
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.e("SharedPublicationCard", "❌ Navigation error: ${e.message}", e)
+                }
+            } else {
+                android.util.Log.e("SharedPublicationCard", "❌ Empty publication ID, cannot navigate")
+            }
+        },
+        modifier = modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp)),
+        color = Color(0xFF2d3a4a).copy(alpha = 0.3f),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF3B82F6).copy(alpha = 0.3f)),
+        shadowElevation = 4.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFF1a2a3a).copy(alpha = 0.9f),
+                            Color(0xFF1a2a3a).copy(alpha = 0.7f)
+                        )
+                    )
+                )
+                .padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            // Publication Image or Icon
+            if (imageUrl.isNotEmpty()) {
+                AsyncImage(
+                    model = imageUrl,
+                    contentDescription = "Publication image",
+                    modifier = Modifier
+                        .size(70.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color(0xFF1a2a3a)),
+                    contentScale = ContentScale.Crop
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(70.dp)
+                        .background(Color(0xFF3B82F6).copy(alpha = 0.2f), RoundedCornerShape(12.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Article,
+                        contentDescription = null,
+                        tint = Color(0xFF3B82F6),
+                        modifier = Modifier.size(32.dp)
+                    )
+                }
+            }
+
+            // Publication Info
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Shared indicator
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Share,
+                        contentDescription = null,
+                        tint = Color(0xFF3B82F6),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = "Publication partagée",
+                        color = Color(0xFF3B82F6),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+
+                // Content preview
+                if (content.isNotEmpty()) {
+                    Text(
+                        text = content,
+                        color = Color.White,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 2,
+                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    )
+                }
+
+                // Author
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Person,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Text(
+                        text = author,
+                        color = Color.White.copy(alpha = 0.7f),
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            // Arrow indicator
+            Icon(
+                imageVector = Icons.Default.ArrowForward,
+                contentDescription = "View",
+                tint = Color(0xFF3B82F6),
                 modifier = Modifier.size(20.dp)
             )
         }

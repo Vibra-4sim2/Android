@@ -9,6 +9,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -22,6 +23,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -34,10 +36,11 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
-import com.example.dam.ui.theme.CardDark
-import com.example.dam.ui.theme.SuccessGreen
+import coil.compose.AsyncImage
+import com.example.dam.models.FollowUserItem
 import com.example.dam.viewmodel.AddPublicationViewModel
 import com.example.dam.viewmodel.AddPublicationUiState
+import androidx.compose.ui.layout.ContentScale
 
 // Couleurs - Palette élégante et minimaliste
 private val BackgroundDark = Color(0xFF0A0A0A)
@@ -110,17 +113,22 @@ fun AddPublicationScreen(navController: NavHostController) {
         }
     }
 
-    // 🚨 Navigation automatique après succès
+    // 🚨 Navigation automatique après succès + Toast
+    var showSuccessToast by remember { mutableStateOf(false) }
+    var showErrorToast by remember { mutableStateOf(false) }
+    var errorMessage by remember { mutableStateOf("") }
+
     LaunchedEffect(uiState) {
         Log.d("AddPublicationScreen", "🔄 UI State changed: $uiState")
         when (val state = uiState) {
             is AddPublicationUiState.Success -> {
                 Log.d("AddPublicationScreen", "✅ SUCCESS! Publication ID: ${state.publicationId}")
+                showSuccessToast = true
+
+                // Petit délai pour afficher le toast
+                kotlinx.coroutines.delay(1500)
+
                 Log.d("AddPublicationScreen", "🚀 Navigating to feed...")
-
-                // Petit délai pour laisser l'UI se stabiliser
-                kotlinx.coroutines.delay(300)
-
                 // Navigation simple vers feed en supprimant addpublication du backstack
                 navController.navigate("feed") {
                     // Supprimer TOUT jusqu'à home, puis aller à feed
@@ -133,9 +141,12 @@ fun AddPublicationScreen(navController: NavHostController) {
                 // Reset l'état après navigation
                 kotlinx.coroutines.delay(100)
                 viewModel.resetUiState()
+                showSuccessToast = false
             }
             is AddPublicationUiState.Error -> {
                 Log.e("AddPublicationScreen", "❌ Error: ${state.message}")
+                errorMessage = state.message
+                showErrorToast = true
             }
             is AddPublicationUiState.Loading -> {
                 Log.d("AddPublicationScreen", "⏳ Loading...")
@@ -166,6 +177,57 @@ fun AddPublicationScreen(navController: NavHostController) {
                 isPostEnabled = contentText.isNotBlank(),
                 isPosting = uiState is AddPublicationUiState.Loading
             )
+        },
+        snackbarHost = {
+            // Success Snackbar
+            if (showSuccessToast) {
+                Snackbar(
+                    modifier = Modifier.padding(16.dp),
+                    containerColor = GreenAccent,
+                    contentColor = Color.White,
+                    action = {
+                        TextButton(onClick = { showSuccessToast = false }) {
+                            Text("OK", color = Color.White)
+                        }
+                    }
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Publication created successfully! 🎉")
+                    }
+                }
+            }
+
+            // Error Snackbar
+            if (showErrorToast) {
+                Snackbar(
+                    modifier = Modifier.padding(16.dp),
+                    containerColor = RedAccent,
+                    contentColor = Color.White,
+                    action = {
+                        TextButton(onClick = { showErrorToast = false }) {
+                            Text("OK", color = Color.White)
+                        }
+                    }
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Error,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(errorMessage)
+                    }
+                }
+            }
         }
     ) { paddingValues ->
         Column(
@@ -209,20 +271,17 @@ fun AddPublicationScreen(navController: NavHostController) {
                         color = CardBackgroundLight
                     ) {
                         if (userAvatar != null && userAvatar!!.isNotEmpty()) {
-                            // TODO: Charger l'image avec Coil si vous avez la lib
-                            // AsyncImage(model = userAvatar, ...)
-                            Box(
-                                contentAlignment = Alignment.Center,
-                                modifier = Modifier.fillMaxSize()
-                            ) {
-                                Text(
-                                    text = userInitials,
-                                    color = GreenAccent,
-                                    fontSize = 18.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
+                            // ✅ Display avatar with Coil
+                            AsyncImage(
+                                model = userAvatar,
+                                contentDescription = "User Avatar",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                            )
                         } else {
+                            // Display initials as fallback
                             Box(
                                 contentAlignment = Alignment.Center,
                                 modifier = Modifier.fillMaxSize()
@@ -420,6 +479,21 @@ fun AddPublicationScreen(navController: NavHostController) {
                 }
             }
 
+            // ✅ Mentioned users display
+            if (mentionedUsers.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(16.dp))
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(mentionedUsers) { userId ->
+                        MentionChip(
+                            userId = userId,
+                            onRemove = { viewModel.removeMention(userId) }
+                        )
+                    }
+                }
+            }
+
             Spacer(modifier = Modifier.height(28.dp))
 
             // Actions - Design moderne avec 3 boutons
@@ -447,7 +521,7 @@ fun AddPublicationScreen(navController: NavHostController) {
                     icon = Icons.Outlined.AlternateEmail,
                     label = "Mention",
                     color = GreenAccent,
-                    onClick = { /* TODO: Désactivé pour l'instant */ },
+                    onClick = { showMentionDialog = true },
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -544,6 +618,16 @@ fun AddPublicationScreen(navController: NavHostController) {
         }
 
         // Dialogs
+        if (showMentionDialog) {
+            MentionSelectionDialog(
+                onDismiss = { showMentionDialog = false },
+                onUsersSelected = { userIds ->
+                    viewModel.setMentions(userIds)
+                    showMentionDialog = false
+                }
+            )
+        }
+
         if (showTagDialog) {
             TagSelectionDialog(
                 onDismiss = { showTagDialog = false },
@@ -855,3 +939,320 @@ fun TagSelectionDialog(onDismiss: () -> Unit, onTagsSelected: (List<String>) -> 
         }
     )
 }
+
+@Composable
+fun MentionChip(userId: String, onRemove: () -> Unit) {
+    val context = LocalContext.current
+    var userName by remember { mutableStateOf("Loading...") }
+
+    // Fetch user info
+    LaunchedEffect(userId) {
+        try {
+            val token = com.example.dam.utils.UserPreferences.getToken(context)
+            if (token != null) {
+                val apiService = com.example.dam.remote.RetrofitInstance.authApi
+                val response = apiService.getUserById(userId, "Bearer $token")
+                if (response.isSuccessful && response.body() != null) {
+                    val user = response.body()!!
+                    userName = "${user.firstName} ${user.lastName}"
+                }
+            }
+        } catch (e: Exception) {
+            userName = "User"
+        }
+    }
+
+    Surface(
+        shape = RoundedCornerShape(24.dp),
+        color = Color.Transparent,
+        modifier = Modifier.shadow(4.dp, RoundedCornerShape(24.dp))
+    ) {
+        Box(
+            modifier = Modifier
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(
+                            Color(0xFF3B82F6).copy(alpha = 0.25f),
+                            Color(0xFF3B82F6).copy(alpha = 0.15f)
+                        )
+                    ),
+                    RoundedCornerShape(24.dp)
+                )
+                .border(
+                    width = 1.5.dp,
+                    color = Color(0xFF3B82F6).copy(alpha = 0.4f),
+                    shape = RoundedCornerShape(24.dp)
+                )
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "@$userName",
+                    color = Color(0xFF3B82F6),
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Spacer(modifier = Modifier.width(8.dp))
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove",
+                    tint = Color(0xFF3B82F6),
+                    modifier = Modifier
+                        .size(16.dp)
+                        .clickable { onRemove() }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun MentionSelectionDialog(
+    onDismiss: () -> Unit,
+    onUsersSelected: (List<String>) -> Unit
+) {
+    val context = LocalContext.current
+    var followers by remember { mutableStateOf<List<FollowUserItem>>(emptyList()) }
+    var selectedUsers by remember { mutableStateOf<List<String>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(true) }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    // Load followers from API
+    LaunchedEffect(Unit) {
+        try {
+            val userId = com.example.dam.utils.UserPreferences.getUserId(context)
+            val token = com.example.dam.utils.UserPreferences.getToken(context)
+
+            if (userId != null && token != null) {
+                val apiService = com.example.dam.remote.RetrofitInstance.authApi
+                val response = apiService.getFollowers(userId, 1, 100, "Bearer $token")
+
+                if (response.isSuccessful && response.body() != null) {
+                    followers = response.body()!!.followers
+                    Log.d("MentionDialog", "✅ Loaded ${followers.size} followers")
+                } else {
+                    errorMessage = "Failed to load followers"
+                    Log.e("MentionDialog", "❌ Error: ${response.code()}")
+                }
+            }
+        } catch (e: Exception) {
+            errorMessage = "Error: ${e.message}"
+            Log.e("MentionDialog", "❌ Exception loading followers", e)
+        } finally {
+            isLoading = false
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardBackground,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.AlternateEmail,
+                    contentDescription = null,
+                    tint = GreenAccent,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text("Mention Followers", color = TextPrimary, fontWeight = FontWeight.Bold)
+            }
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(400.dp)
+            ) {
+                when {
+                    isLoading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(
+                                color = GreenAccent,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+                    }
+                    errorMessage != null -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = errorMessage!!,
+                                color = RedAccent,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                    followers.isEmpty() -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.PersonOff,
+                                    contentDescription = null,
+                                    tint = TextSecondary,
+                                    modifier = Modifier.size(48.dp)
+                                )
+                                Text(
+                                    text = "No followers yet",
+                                    color = TextSecondary,
+                                    fontSize = 14.sp
+                                )
+                            }
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(followers) { user ->
+                                FollowerItem(
+                                    user = user,
+                                    isSelected = user.id in selectedUsers,
+                                    onToggle = {
+                                        selectedUsers = if (user.id in selectedUsers) {
+                                            selectedUsers - user.id
+                                        } else {
+                                            selectedUsers + user.id
+                                        }
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onUsersSelected(selectedUsers) },
+                enabled = selectedUsers.isNotEmpty()
+            ) {
+                Text(
+                    text = "Mention (${selectedUsers.size})",
+                    color = if (selectedUsers.isNotEmpty()) GreenAccent else TextSecondary
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel", color = TextSecondary)
+            }
+        }
+    )
+}
+
+@Composable
+fun FollowerItem(
+    user: FollowUserItem,
+    isSelected: Boolean,
+    onToggle: () -> Unit
+) {
+    Surface(
+        onClick = onToggle,
+        shape = RoundedCornerShape(16.dp),
+        color = if (isSelected) GreenAccent.copy(alpha = 0.15f) else CardBackgroundLight,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                // Avatar
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(
+                                    GreenAccent.copy(alpha = 0.2f),
+                                    Color.Transparent
+                                )
+                            ),
+                            CircleShape
+                        )
+                        .border(1.5.dp, GreenAccent.copy(alpha = 0.3f), CircleShape)
+                        .padding(2.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        shape = CircleShape,
+                        color = CardBackgroundLight
+                    ) {
+                        if (!user.avatar.isNullOrEmpty()) {
+                            AsyncImage(
+                                model = user.avatar,
+                                contentDescription = "Avatar",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clip(CircleShape)
+                            )
+                        } else {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Text(
+                                    text = "${user.firstName.firstOrNull() ?: ""}${user.lastName.firstOrNull() ?: ""}".uppercase(),
+                                    color = GreenAccent,
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // User info
+                Column {
+                    Text(
+                        text = "${user.firstName} ${user.lastName}",
+                        color = TextPrimary,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = user.email,
+                        color = TextSecondary,
+                        fontSize = 12.sp
+                    )
+                }
+            }
+
+            // Checkbox
+            Checkbox(
+                checked = isSelected,
+                onCheckedChange = { onToggle() },
+                colors = CheckboxDefaults.colors(
+                    checkedColor = GreenAccent,
+                    uncheckedColor = TextSecondary
+                )
+            )
+        }
+    }
+}
+

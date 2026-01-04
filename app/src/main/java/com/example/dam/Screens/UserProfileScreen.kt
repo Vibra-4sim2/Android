@@ -858,6 +858,7 @@ fun PublicationCard(
 ) {
     var localIsLiked by remember { mutableStateOf(isLiked) }
     var localLikesCount by remember { mutableStateOf(publication.likesCount) }
+    var showShareDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(isLiked) { localIsLiked = isLiked }
     LaunchedEffect(publication.likesCount) { localLikesCount = publication.likesCount }
@@ -1007,13 +1008,21 @@ fun PublicationCard(
                     Text("Comment", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
 
-                TextButton(onClick = { /* TODO */ }) {
+                TextButton(onClick = { showShareDialog = true }) {
                     Icon(Icons.Outlined.Share, contentDescription = "Share", modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Share", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                 }
             }
         }
+    }
+
+    // ✅ Share Dialog
+    if (showShareDialog) {
+        SharePublicationDialog(
+            publication = publication,
+            onDismiss = { showShareDialog = false }
+        )
     }
 }
 
@@ -1439,3 +1448,6 @@ fun formatDate(dateString: String): String {
         dateString
     }
 }
+
+// Note: SharePublicationDialog and PublicationShareCard are defined in FeedScreen.kt
+// and are accessible here since both files are in the same package (com.example.dam.Screens)
