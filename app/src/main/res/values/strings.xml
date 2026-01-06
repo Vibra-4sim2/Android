@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">Vibra</string>
+    <string name="default_web_client_id">67249250744-fqr2ccnoipafqcr2gesmhueg4h6orr7m.apps.googleusercontent.com</string>
+    <!-- res/values/strings.xml -->
+    <string name="google_maps_key">AIzaSyDBAlApULWx9IjcK-z7k8i46QcD4h9I20o</string>
+</resources>
+

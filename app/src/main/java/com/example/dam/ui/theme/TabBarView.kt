@@ -1,0 +1,1030 @@
+package com.example.dam.ui.theme
+
+import android.util.Log
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.example.dam.Screens.*
+import com.example.dam.models.EligibleSortieForRating
+import com.example.dam.utils.UserPreferences
+import com.example.dam.viewmodel.ChatViewModel
+import com.example.dam.viewmodel.LoginViewModel
+import com.example.dam.viewmodel.RatingViewModel
+import com.example.dam.viewmodel.NotificationViewModel
+import com.example.dam.viewmodel.MyParticipationRequestsViewModel
+import java.net.URLDecoder  // ✅ Import pour le décodage des URLs
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+fun TabBarView(
+    navController: NavHostController
+) {
+    val context = LocalContext.current
+
+    // ✅ Use global theme state
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
+
+    var showOptions by remember { mutableStateOf(false) }
+    var showLogoutDialog by remember { mutableStateOf(false) }
+
+    val chatViewModel: ChatViewModel = viewModel()
+    val loginViewModel: LoginViewModel = viewModel()
+
+    // ✅ NEW: Rating ViewModel for eligible sorties popup
+    val ratingViewModel: RatingViewModel = viewModel()
+
+    // ✅ NEW: Notification ViewModel for notification badge
+    val notificationViewModel: NotificationViewModel = viewModel()
+    val unreadNotifCount by notificationViewModel.unreadCount.collectAsState()
+
+    // ✅ NEW: My Participation Requests ViewModel for requests badge
+    val myParticipationRequestsViewModel: MyParticipationRequestsViewModel = viewModel()
+    val pendingRequestsCount by myParticipationRequestsViewModel.pendingCount.collectAsState()
+
+    val eligibleSorties: List<EligibleSortieForRating> by ratingViewModel.eligibleSorties.collectAsState()
+    val ratingIsLoading: Boolean by ratingViewModel.isLoading.collectAsState()
+    val ratingError: String? by ratingViewModel.errorMessage.collectAsState()
+    val ratingSuccess: String? by ratingViewModel.successMessage.collectAsState()
+
+    // ✅ NEW: State for rating dialog
+    var showEligibleRatingPopup by remember { mutableStateOf(false) }
+    var showIndividualRatingDialog by remember { mutableStateOf(false) }
+    var selectedSortieForRating by remember { mutableStateOf<String?>(null) }
+    var isHomeScreenReady by remember { mutableStateOf(false) }
+
+    val internalNavController = rememberNavController()
+    val navBackStackEntry by internalNavController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    val tabs = listOf("Home", "Discussions", "Add", "Community", "Profile")
+
+    // ✅ CORRECTION CRITIQUE : Utiliser derivedStateOf pour synchroniser selectedTab avec currentRoute
+    // sans causer de conflits lors des recompositions
+    val selectedTab by remember {
+        derivedStateOf {
+            when (currentRoute) {
+                "home" -> 0
+                "messages" -> 1
+                "add" -> 2
+                "feed" -> 3
+                "profile" -> 4
+                else -> 0
+            }
+        }
+    }
+
+    // ✅ NEW: Load eligible sorties when app starts
+    LaunchedEffect(Unit) {
+        val token = UserPreferences.getToken(context)
+        val userId = UserPreferences.getUserId(context)
+        if (!token.isNullOrEmpty()) {
+            Log.d("TabBarView", "🔍 Loading eligible sorties for rating...")
+            ratingViewModel.loadEligibleSorties(token)
+
+            // ✅ Load notification count
+            notificationViewModel.loadUnreadCount(context)
+
+            // ✅ Load participation requests count
+            if (!userId.isNullOrEmpty()) {
+                myParticipationRequestsViewModel.loadAllRequestsForUser(userId)
+            }
+        }
+    }
+
+    // ✅ Refresh notification count periodically (every time route changes)
+    LaunchedEffect(currentRoute) {
+        notificationViewModel.loadUnreadCount(context)
+        // ✅ Refresh participation requests only on key routes (not every route change)
+        if (currentRoute == "home" || currentRoute == "profile" || currentRoute == "allParticipationRequests") {
+            val userId = UserPreferences.getUserId(context)
+            if (!userId.isNullOrEmpty()) {
+                myParticipationRequestsViewModel.loadAllRequestsForUser(userId)
+            }
+        }
+    }
+
+    // ✅ NEW: Wait for home screen to be ready before showing popup
+    LaunchedEffect(currentRoute) {
+        if (currentRoute == "home") {
+            // Delay to ensure HomeExploreScreen is fully rendered
+            kotlinx.coroutines.delay(1500) // Wait 1.5 seconds
+            isHomeScreenReady = true
+            Log.d("TabBarView", "✅ Home screen ready, can show popup now")
+        }
+    }
+
+    // ✅ NEW: Show popup when eligible sorties are loaded AND home screen is ready
+    LaunchedEffect(eligibleSorties, isHomeScreenReady) {
+        if (eligibleSorties.isNotEmpty() && !showEligibleRatingPopup && isHomeScreenReady) {
+            Log.d("TabBarView", "✅ Found ${eligibleSorties.size} eligible sorties - showing popup")
+            showEligibleRatingPopup = true
+        }
+    }
+
+    // ✅ NEW: Handle rating success
+    LaunchedEffect(ratingSuccess) {
+        ratingSuccess?.let {
+            Log.d("TabBarView", "✅ Rating submitted successfully")
+            // Close individual rating dialog
+            showIndividualRatingDialog = false
+            selectedSortieForRating = null
+
+            // Remove rated sortie from eligible list
+            selectedSortieForRating?.let { sortieId ->
+                ratingViewModel.removeEligibleSortie(sortieId)
+            }
+
+            // Clear messages
+            ratingViewModel.clearMessages()
+
+            // If no more eligible sorties, close the popup
+            if (eligibleSorties.isEmpty()) {
+                showEligibleRatingPopup = false
+            }
+        }
+    }
+
+    // ✅ NEW: Handle rating error
+    LaunchedEffect(ratingError) {
+        ratingError?.let { error ->
+            Log.e("TabBarView", "❌ Rating error: $error")
+            // Auto-dismiss error after 3 seconds
+            kotlinx.coroutines.delay(3000)
+            ratingViewModel.clearMessages()
+        }
+    }
+
+    val rotation by animateFloatAsState(
+        targetValue = if (showOptions) 180f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "rotation"
+    )
+
+    // ✅ Liste des routes où les barres doivent être cachées
+    val hiddenBarRoutes = listOf(
+        "edit_profile",
+        "addpublication",
+        "sortieDetail/{sortieId}",
+        "chatConversation/{sortieId}/{groupName}/{groupEmoji}/{participantsCount}",
+        "userProfile/{userId}",
+        "participation_requests/{sortieId}",
+        "notifications",  // ✅ Cacher les barres aussi pour les notifications
+        "saved",  // ✅ Cacher les barres pour l'écran saved
+        "privateChat/{conversationId}/{otherUserId}/{otherUserName}/{otherUserAvatar}"  // ✅ Cacher les barres pour le chat privé
+    )
+
+    // ✅ AMÉLIORATION: Vérifier si la route actuelle commence par un des préfixes
+    val shouldShowBars = hiddenBarRoutes.none { route ->
+        currentRoute?.startsWith(route.substringBefore("{")) == true
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        BackgroundGradientStart,
+                        BackgroundDark,
+                        BackgroundGradientEnd
+                    )
+                )
+            )
+    ) {
+        // Main Content
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Top Bar
+            if (shouldShowBars) {
+                Spacer(modifier = Modifier.height(60.dp))
+            }
+
+            // Content Area with Navigation
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+            ) {
+                NavHost(
+                    navController = internalNavController,
+                    startDestination = "home"
+                ) {
+                    composable("home") {
+                        HomeExploreScreen(navController = internalNavController)
+                    }
+                    composable("messages") {
+                        MessagesListScreen(navController = internalNavController)
+                    }
+                    composable("add") {
+                        val token = UserPreferences.getToken(context) ?: ""
+                        CreateAdventureScreen(
+                            navController = internalNavController,
+                            token = token
+                        )
+                    }
+                    composable("feed") {
+                        FeedScreen(navController = internalNavController)
+                    }
+                    composable("profile") {
+                        ProfileScreen(navController = internalNavController)
+                    }
+                    composable("edit_profile") {
+                        EditProfile1Screen(navController = internalNavController)
+                    }
+                    composable("addpublication") {
+                        AddPublicationScreen(navController = internalNavController)
+                    }
+                    // ✅ Route pour l'écran des notifications
+                    composable("notifications") {
+                        NotificationsScreen(navController = internalNavController)
+                    }
+                    // ✅ NEW: Route pour l'écran de toutes les demandes de participation
+                    composable("allParticipationRequests") {
+                        AllParticipationRequestsScreen(navController = internalNavController)
+                    }
+                    composable(
+                        route = "sortieDetail/{sortieId}",
+                        arguments = listOf(
+                            navArgument("sortieId") {
+                                type = NavType.StringType
+                            }
+                        )
+                    ) { backStackEntry ->
+                        val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
+                        SortieDetailScreen(
+                            navController = internalNavController,
+                            sortieId = sortieId
+                        )
+                    }
+                    composable(
+                        route = "chatConversation/{sortieId}/{groupName}/{groupEmoji}/{participantsCount}",
+                        arguments = listOf(
+                            navArgument("sortieId") { type = NavType.StringType },
+                            navArgument("groupName") { type = NavType.StringType },
+                            navArgument("groupEmoji") { type = NavType.StringType },
+                            navArgument("participantsCount") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
+                        val groupName = backStackEntry.arguments?.getString("groupName") ?: ""
+                        val groupEmoji = backStackEntry.arguments?.getString("groupEmoji") ?: ""
+                        val participantsCount = backStackEntry.arguments?.getString("participantsCount") ?: "0"
+
+                        ChatConversationScreen(
+                            navController = internalNavController,
+                            sortieId = sortieId,
+                            groupName = groupName,
+                            groupEmoji = groupEmoji,
+                            participantsCount = participantsCount
+                        )
+                    }
+
+                    // ✅ Participation Requests Route
+                    composable(
+                        route = "participation_requests/{sortieId}",
+                        arguments = listOf(
+                            navArgument("sortieId") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val sortieId = backStackEntry.arguments?.getString("sortieId") ?: ""
+                        ParticipationRequestsScreen(
+                            navController = internalNavController,
+                            sortieId = sortieId
+                        )
+                    }
+
+                    // ✅ User Profile Route
+                    composable(
+                        route = "userProfile/{userId}",
+                        arguments = listOf(
+                            navArgument("userId") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val userId = backStackEntry.arguments?.getString("userId") ?: ""
+                        UserProfileScreen(
+                            navController = internalNavController,
+                            userId = userId
+                        )
+                    }
+
+                    // ✅ Recommendation Routes
+                    composable("recommendation_hub") {
+                        RecommendationHubScreen(navController = internalNavController)
+                    }
+
+
+                    // ✅ NEW: People Recommendations
+                    composable("people_recommendations") {
+                        PeopleRecommendationsScreen(navController = internalNavController)
+                    }
+
+                    // ✅ NEW: Flask AI Recommendations
+                    composable("flask_recommendations") {
+                        FlaskAiRecommendationsScreen(navController = internalNavController)
+                    }
+
+                    // ✅ NEW: Flask Matchmaking
+                    composable("flask_matchmaking") {
+                        FlaskMatchmakingScreen(navController = internalNavController)
+                    }
+
+                    composable("flask_itinerary") {
+                        FlaskItineraryScreen(navController = navController)
+                    }
+
+                    // ✅ Saved Sorties Route
+                    composable("saved") {
+                        SavedSortiesScreen(navController = internalNavController)
+                    }
+
+                    // ✅ Help Center Route
+                    composable("help_center") {
+                        HelpCenterScreen(navController = internalNavController)
+                    }
+
+                    // ✅ Settings Route
+                    composable("settings") {
+                        SettingsScreen(
+                            navController = internalNavController,
+                            onThemeChanged = {
+                                // This will trigger recomposition when theme changes
+                                // The parent activity should handle theme change
+                            }
+                        )
+                    }
+
+                    // ✅ NEW: Private Chat Screen Route
+                    composable(
+                        route = "privateChat/{conversationId}/{otherUserId}/{otherUserName}/{otherUserAvatar}",
+                        arguments = listOf(
+                            navArgument("conversationId") { type = NavType.StringType },
+                            navArgument("otherUserId") { type = NavType.StringType },
+                            navArgument("otherUserName") { type = NavType.StringType },
+                            navArgument("otherUserAvatar") { type = NavType.StringType }
+                        )
+                    ) { backStackEntry ->
+                        val conversationId = backStackEntry.arguments?.getString("conversationId") ?: ""
+                        val otherUserId = backStackEntry.arguments?.getString("otherUserId") ?: ""
+                        val encodedName = backStackEntry.arguments?.getString("otherUserName") ?: "Utilisateur"
+                        val encodedAvatar = backStackEntry.arguments?.getString("otherUserAvatar") ?: ""
+
+                        // Décoder les paramètres
+                        val otherUserName = try {
+                            if (encodedName.isNotEmpty()) {
+                                java.net.URLDecoder.decode(encodedName, "UTF-8")
+                            } else "Utilisateur"
+                        } catch (e: Exception) {
+                            "Utilisateur"
+                        }
+
+                        val otherUserAvatar = try {
+                            if (encodedAvatar.isNotEmpty() && encodedAvatar != "null" && encodedAvatar != "empty") {
+                                java.net.URLDecoder.decode(encodedAvatar, "UTF-8")
+                            } else null
+                        } catch (e: Exception) {
+                            null
+                        }
+
+                        PrivateChatScreen(
+                            navController = internalNavController,
+                            conversationId = conversationId,
+                            otherUserId = otherUserId,
+                            otherUserName = otherUserName,
+                            otherUserAvatar = otherUserAvatar
+                        )
+                    }
+                }
+            }
+        }
+
+        // Top Bar with Dropdown
+        if (shouldShowBars) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.TopCenter)
+                    .statusBarsPadding()
+            ) {
+                // ✅ Dynamic colors based on theme
+                val topBarBg = if (isDarkMode) BackgroundGradientStart else BackgroundLight
+                val topBarGradient1 = if (isDarkMode) CardDark.copy(alpha = 0.8f) else Color.White.copy(alpha = 0.95f)
+                val topBarGradient2 = if (isDarkMode) CardDark.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.85f)
+                val topBarTextColor = if (isDarkMode) TextPrimary else TextPrimaryLight
+                val topBarAccentColor = if (isDarkMode) GreenAccent.copy(alpha = 0.7f) else GreenAccentLight
+                val topBarCircleBg = if (isDarkMode) BackgroundDark else CardLight
+                val topBarCircleBorder = if (isDarkMode) BorderColor else BorderColorLight
+                val topBarCardBg = if (isDarkMode) CardDark.copy(alpha = 0.5f) else CardLight
+
+                // Top Bar - Glass Design
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = topBarBg,
+                    shadowElevation = if (isDarkMode) 0.dp else 4.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(topBarGradient1, topBarGradient2)
+                                )
+                            )
+                            .padding(horizontal = 20.dp)
+                            .padding(top = 12.dp, bottom = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column {
+                            Text(
+                                text = "V!BRA",
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = topBarTextColor,
+                                letterSpacing = 1.sp
+                            )
+                            Text(
+                                text = "Explore Adventures",
+                                fontSize = 12.sp,
+                                color = topBarAccentColor
+                            )
+                        }
+
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // ✅ Icône de notification avec badge
+                            Surface(
+                                onClick = {
+                                    internalNavController.navigate("notifications") {
+                                        launchSingleTop = true
+                                    }
+                                },
+                                shape = CircleShape,
+                                color = topBarCircleBg,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, topBarCircleBorder),
+                                modifier = Modifier.size(40.dp),
+                                shadowElevation = if (isDarkMode) 0.dp else 2.dp
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(topBarCardBg),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    BadgedBox(
+                                        badge = {
+                                            if (unreadNotifCount > 0) {
+                                                Badge(
+                                                    containerColor = Color(0xFFFF4444),
+                                                    contentColor = Color.White
+                                                ) {
+                                                    Text(
+                                                        text = if (unreadNotifCount > 99) "99+" else "$unreadNotifCount",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 10.sp
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Notifications,
+                                            contentDescription = "Notifications",
+                                            tint = topBarAccentColor,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // ✅ NEW: Icône de demandes de participation avec badge
+                            Surface(
+                                onClick = {
+                                    internalNavController.navigate("allParticipationRequests") {
+                                        launchSingleTop = true
+                                    }
+                                },
+                                shape = CircleShape,
+                                color = topBarCircleBg,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, topBarCircleBorder),
+                                modifier = Modifier.size(40.dp),
+                                shadowElevation = if (isDarkMode) 0.dp else 2.dp
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(topBarCardBg),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    BadgedBox(
+                                        badge = {
+                                            if (pendingRequestsCount > 0) {
+                                                Badge(
+                                                    containerColor = Color(0xFFFFA500),
+                                                    contentColor = Color.White
+                                                ) {
+                                                    Text(
+                                                        text = if (pendingRequestsCount > 99) "99+" else "$pendingRequestsCount",
+                                                        style = MaterialTheme.typography.labelSmall,
+                                                        fontSize = 10.sp
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.GroupAdd,
+                                            contentDescription = "Demandes de participation",
+                                            tint = topBarAccentColor,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Menu dropdown existant
+                            Surface(
+                                onClick = { showOptions = !showOptions },
+                                shape = CircleShape,
+                                color = topBarCircleBg,
+                                border = androidx.compose.foundation.BorderStroke(1.dp, topBarCircleBorder),
+                                modifier = Modifier.size(40.dp),
+                                shadowElevation = if (isDarkMode) 0.dp else 2.dp
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(topBarCardBg),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.KeyboardArrowDown,
+                                        contentDescription = "Menu",
+                                        tint = topBarAccentColor,
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                            .rotate(rotation)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Dropdown Menu
+                AnimatedVisibility(
+                    visible = showOptions,
+                    enter = slideInVertically(
+                        initialOffsetY = { -it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeIn(),
+                    exit = slideOutVertically(
+                        targetOffsetY = { -it },
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        )
+                    ) + fadeOut()
+                ) {
+                    GlassDropdownMenu(
+                        onLogout = { showLogoutDialog = true },
+                        onSavedClick = {
+                            showOptions = false
+                            internalNavController.navigate("saved") {
+                                launchSingleTop = true
+                            }
+                        },
+                        navController = internalNavController,
+                        onDismiss = { showOptions = false }
+                    )
+                }
+            }
+        }
+
+        // Glass Bottom Navigation Bar
+        if (shouldShowBars) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 12.dp)
+            ) {
+                GlassBottomNav(
+                    tabs = tabs,
+                    selectedIndex = selectedTab,
+                    onTabSelected = { index ->
+                        // Navigation simple et directe
+                        val route = when (index) {
+                            0 -> "home"
+                            1 -> "messages"
+                            2 -> "add"
+                            3 -> "feed"
+                            4 -> "profile"
+                            else -> "home"
+                        }
+
+                        Log.d("TabBarView", "🔘 Tab clicked: index=$index, route=$route, currentRoute=$currentRoute")
+
+                        // ✅ FIX: Clear back stack completely to prevent Settings → Edit Profile → Home issue
+                        Log.d("TabBarView", "➡️ Navigating to $route")
+                        internalNavController.navigate(route) {
+                            // Pop everything up to and including the route itself to clear back stack
+                            popUpTo(route) {
+                                inclusive = true
+                                saveState = false  // ✅ Don't save state to prevent restoration issues
+                            }
+                            // Avoid multiple copies of the same destination
+                            launchSingleTop = true
+                            // ✅ Don't restore state - this was causing the Settings issue
+                            restoreState = false
+                        }
+                    }
+                )
+            }
+        }
+
+        // ✅ NEW: Eligible Sorties Rating Popup (shows on top of everything with higher z-index)
+        if (showEligibleRatingPopup && eligibleSorties.isNotEmpty() && currentRoute == "home") {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.75f)) // Darker overlay
+                    .clickable(enabled = false) {} // Prevent clicks through
+            ) {
+                EligibleSortiesRatingDialog(
+                    eligibleSorties = eligibleSorties,
+                    onDismiss = {
+                        showEligibleRatingPopup = false
+                    },
+                    onRateSortie = { sortieId ->
+                        selectedSortieForRating = sortieId
+                        showIndividualRatingDialog = true
+                    },
+                    onRateLater = {
+                        showEligibleRatingPopup = false
+                    }
+                )
+            }
+        }
+
+        // ✅ NEW: Individual Rating Dialog (for rating a specific sortie)
+        if (showIndividualRatingDialog && selectedSortieForRating != null) {
+            RatingDialog(
+                onDismiss = {
+                    showIndividualRatingDialog = false
+                    selectedSortieForRating = null
+                    ratingViewModel.clearMessages()
+                },
+                onSubmit = { rating, comment ->
+                    val token = UserPreferences.getToken(context) ?: ""
+                    ratingViewModel.submitRating(
+                        sortieId = selectedSortieForRating!!,
+                        stars = rating,
+                        comment = comment,
+                        token = token,
+                        onSuccess = {
+                            // Success is handled in LaunchedEffect above
+                        }
+                    )
+                },
+                isLoading = ratingIsLoading,
+                errorMessage = ratingError
+            )
+        }
+
+        // Logout Dialog
+        if (showLogoutDialog) {
+            AlertDialog(
+                onDismissRequest = { showLogoutDialog = false },
+                title = {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.Logout,
+                            contentDescription = null,
+                            tint = ErrorRed
+                        )
+                        Text("Logout", fontWeight = FontWeight.Bold)
+                    }
+                },
+                text = { Text("Are you sure you want to logout?") },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            loginViewModel.logout(context, chatViewModel)
+                            showLogoutDialog = false
+                            navController.navigate("login") {
+                                popUpTo(0) { inclusive = true }
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(ErrorRed)
+                    ) {
+                        Text("Confirm")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showLogoutDialog = false }) {
+                        Text("Cancel", color = TextTertiary)
+                    }
+                },
+                containerColor = CardDark,
+                titleContentColor = TextPrimary,
+                textContentColor = TextSecondary,
+                shape = RoundedCornerShape(20.dp)
+            )
+        }
+
+        // ✅ NEW: Show error snackbar if rating fails
+        ratingError?.let { error ->
+            LaunchedEffect(error) {
+                Log.e("TabBarView", "⚠️ Rating error displayed: $error")
+            }
+        }
+    }
+}
+
+@Composable
+fun GlassDropdownMenu(
+    onLogout: () -> Unit,
+    onSavedClick: () -> Unit,
+    navController: NavHostController,
+    onDismiss: () -> Unit = {}
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp),
+        shape = RoundedCornerShape(20.dp),
+        color = CardGlass,
+        shadowElevation = 8.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            CardDark.copy(alpha = 0.7f),
+                            CardDark.copy(alpha = 0.9f)
+                        )
+                    )
+                )
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            GlassMenuItem(
+                icon = Icons.Default.BookmarkBorder,
+                label = "Saved",
+                onClick = onSavedClick
+            )
+            GlassMenuItem(
+                icon = Icons.AutoMirrored.Filled.HelpOutline,
+                label = "Help Center",
+                onClick = {
+                    onDismiss()  // ✅ Close dropdown
+                    navController.navigate("help_center")
+                }
+            )
+            GlassMenuItem(
+                icon = Icons.Default.Settings,
+                label = "Settings",
+                onClick = {
+                    onDismiss()  // ✅ Close dropdown
+                    navController.navigate("settings")
+                }
+            )
+            GlassMenuItem(
+                icon = Icons.AutoMirrored.Filled.Logout,
+                label = "Logout",
+                onClick = onLogout,
+                tintColor = ErrorRed
+            )
+        }
+    }
+}
+
+@Composable
+fun GlassMenuItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: (() -> Unit)? = null,
+    tintColor: Color = GreenAccent
+) {
+    Surface(
+        onClick = { onClick?.invoke() },
+        shape = RoundedCornerShape(12.dp),
+        color = CardGlass,
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, BorderColor),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardDark.copy(alpha = 0.3f))
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(7.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = tintColor,
+                modifier = Modifier.size(25.dp)
+            )
+            Text(
+                text = label,
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Medium
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = TextTertiary,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun GlassBottomNav(
+    tabs: List<String>,
+    selectedIndex: Int,
+    onTabSelected: (Int) -> Unit
+) {
+    // ✅ Use global theme for dynamic colors
+    val themeState = LocalThemeState.current
+    val isDarkMode = themeState.isDarkMode
+
+    val navGlowColor1 = if (isDarkMode) GreenAccent.copy(alpha = 0.2f) else GreenAccentLight.copy(alpha = 0.1f)
+    val navGlowColor2 = if (isDarkMode) TealAccent.copy(alpha = 0.2f) else GreenLightMode.copy(alpha = 0.1f)
+    val navBg = if (isDarkMode) CardGlass else CardLight
+    val navBorder = if (isDarkMode) BorderColor else BorderColorLight
+    val navGradient1 = if (isDarkMode) CardDark.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.95f)
+    val navGradient2 = if (isDarkMode) CardDark.copy(alpha = 0.6f) else Color.White.copy(alpha = 0.98f)
+    val navAccent = if (isDarkMode) GreenAccent else GreenAccentLight
+    val navCircleBorder = if (isDarkMode) BackgroundDark else CardLight
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        // Glow effect
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(70.dp)
+                .align(Alignment.Center)
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(navGlowColor1, navGlowColor2, navGlowColor1)
+                    ),
+                    shape = RoundedCornerShape(35.dp)
+                )
+                .blur(12.dp)
+        )
+
+        // Glass navbar
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(35.dp),
+            color = navBg,
+            shadowElevation = if (isDarkMode) 8.dp else 12.dp,
+            border = androidx.compose.foundation.BorderStroke(1.dp, navBorder)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.horizontalGradient(
+                            colors = listOf(navGradient1, navGradient2, navGradient1)
+                        )
+                    )
+                    .padding(vertical = 8.dp, horizontal = 8.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                tabs.forEachIndexed { index, label ->
+                    if (index == 2) {
+                        Box(modifier = Modifier.size(60.dp)) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        Brush.radialGradient(
+                                            colors = listOf(
+                                                navAccent.copy(alpha = 0.6f),
+                                                Color.Transparent
+                                            )
+                                        ),
+                                        shape = CircleShape
+                                    )
+                                    .blur(8.dp)
+                            )
+
+                            Surface(
+                                onClick = { onTabSelected(index) },
+                                shape = CircleShape,
+                                color = Color.Transparent,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .border(4.dp, navCircleBorder, CircleShape)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(
+                                            Brush.radialGradient(
+                                                colors = listOf(GreenAccent, TealAccent)
+                                            )
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "Add",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(28.dp)
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Surface(
+                            onClick = { onTabSelected(index) },
+                            shape = RoundedCornerShape(20.dp),
+                            color = if (selectedIndex == index)
+                                GreenAccent.copy(alpha = 0.15f)
+                            else
+                                Color.Transparent,
+                            modifier = Modifier
+                                .height(48.dp)
+                                .padding(4.dp)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxHeight()
+                                    .padding(horizontal = 16.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = when (label) {
+                                        "Home" -> Icons.Default.Home
+                                        "Discussions" -> Icons.Default.ChatBubble
+                                        "Community" -> Icons.Default.Group
+                                        "Profile" -> Icons.Default.Person
+                                        else -> Icons.Default.Home
+                                    },
+                                    contentDescription = label,
+                                    tint = if (selectedIndex == index)
+                                        GreenAccent
+                                    else
+                                        TextSecondary,
+                                    modifier = Modifier.size(24.dp)
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

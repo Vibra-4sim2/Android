@@ -1,0 +1,1906 @@
+package com.example.dam.Screens
+
+import android.content.Context
+import android.util.Log
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextAlign
+import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavController
+import coil.compose.AsyncImage
+import com.example.dam.NavigationRoutes
+import com.example.dam.R
+import com.example.dam.models.SortieResponse
+import com.example.dam.ui.theme.*
+import com.example.dam.utils.AvatarCache
+import com.example.dam.utils.UserAvatar
+import com.example.dam.viewmodel.FlaskAiViewModel
+import com.example.dam.viewmodel.ParticipationViewModel
+import com.example.dam.viewmodel.SortieDetailViewModel
+import com.google.android.gms.maps.CameraUpdateFactory
+import com.google.android.gms.maps.model.BitmapDescriptorFactory
+import com.google.android.gms.maps.model.CameraPosition
+import com.google.android.gms.maps.model.LatLng
+import com.google.android.gms.maps.model.LatLngBounds
+import com.google.maps.android.compose.*
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.text.SimpleDateFormat
+import java.util.*
+import kotlin.math.atan2
+import kotlin.math.cos
+import kotlin.math.pow
+import kotlin.math.sin
+import kotlin.math.sqrt
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SortieDetailScreen(
+    navController: NavController,
+    sortieId: String,
+    viewModel: SortieDetailViewModel = viewModel(),
+    participationViewModel: ParticipationViewModel = viewModel(),
+    flaskAiViewModel: FlaskAiViewModel = viewModel()
+) {
+    val context = LocalContext.current
+
+    // ✅ COMPREHENSIVE TOKEN RETRIEVAL - Check all possible storage locations
+    val sharedPref = context.getSharedPreferences("auth_prefs", Context.MODE_PRIVATE)
+    val authToken = sharedPref.getString("access_token", "") ?: ""
+    val authUserId = sharedPref.getString("user_id", "") ?: ""
+
+    // Also check cycle_app_prefs directly
+    val cyclePrefs = context.getSharedPreferences("cycle_app_prefs", Context.MODE_PRIVATE)
+    val cycleToken = cyclePrefs.getString("auth_token", "") ?: ""
+    val cycleUserId = cyclePrefs.getString("user_id", "") ?: ""
+
+    // And check via UserPreferences helper
+    val userPrefToken = com.example.dam.utils.UserPreferences.getToken(context) ?: ""
+    val userPrefUserId = com.example.dam.utils.UserPreferences.getUserId(context) ?: ""
+
+    // Use the first non-empty token we find
+    val token = when {
+        authToken.isNotEmpty() -> {
+            Log.d("SortieDetailScreen", "✅ Using token from auth_prefs")
+            authToken
+        }
+        cycleToken.isNotEmpty() -> {
+            Log.d("SortieDetailScreen", "✅ Using token from cycle_app_prefs")
+            cycleToken
+        }
+        userPrefToken.isNotEmpty() -> {
+            Log.d("SortieDetailScreen", "✅ Using token from UserPreferences")
+            userPrefToken
+        }
+        else -> {
+            Log.e("SortieDetailScreen", "❌ NO TOKEN FOUND IN ANY LOCATION!")
+            ""
+        }
+    }
+
+    val currentUserId = when {
+        authUserId.isNotEmpty() -> authUserId
+        cycleUserId.isNotEmpty() -> cycleUserId
+        userPrefUserId.isNotEmpty() -> userPrefUserId
+        else -> ""
+    }
+
+    // Comprehensive debugging log
+    LaunchedEffect(Unit) {
+        Log.d("SortieDetailScreen", "========== TOKEN DEBUG ==========")
+
+        // Show all keys in auth_prefs
+        val authKeys = sharedPref.all.keys
+        Log.d("SortieDetailScreen", "auth_prefs keys: $authKeys")
+        Log.d("SortieDetailScreen", "auth_prefs.access_token: ${if (authToken.isNotEmpty()) authToken.take(30) + "..." else "EMPTY"}")
+        Log.d("SortieDetailScreen", "auth_prefs.user_id: ${if (authUserId.isNotEmpty()) authUserId else "EMPTY"}")
+
+        // Show all keys in cycle_app_prefs
+        val cycleKeys = cyclePrefs.all.keys
+        Log.d("SortieDetailScreen", "cycle_app_prefs keys: $cycleKeys")
+        Log.d("SortieDetailScreen", "cycle_app_prefs.auth_token: ${if (cycleToken.isNotEmpty()) cycleToken.take(30) + "..." else "EMPTY"}")
+        Log.d("SortieDetailScreen", "cycle_app_prefs.user_id: ${if (cycleUserId.isNotEmpty()) cycleUserId else "EMPTY"}")
+
+        // UserPreferences
+        Log.d("SortieDetailScreen", "UserPreferences.getToken(): ${if (userPrefToken.isNotEmpty()) userPrefToken.take(30) + "..." else "EMPTY"}")
+        Log.d("SortieDetailScreen", "UserPreferences.getUserId(): ${if (userPrefUserId.isNotEmpty()) userPrefUserId else "EMPTY"}")
+
+        // Final values
+        Log.d("SortieDetailScreen", "─────────────────────────────────")
+        Log.d("SortieDetailScreen", "FINAL token: ${if (token.isNotEmpty()) token.take(30) + "..." else "❌ EMPTY"}")
+        Log.d("SortieDetailScreen", "FINAL userId: ${if (currentUserId.isNotEmpty()) currentUserId else "❌ EMPTY"}")
+        Log.d("SortieDetailScreen", "Token available: ${token.isNotEmpty()}")
+        Log.d("SortieDetailScreen", "==================================")
+    }
+
+    // ✅ ADD: SavedSortiesViewModel for save functionality
+    val savedSortiesViewModel: com.example.dam.viewmodel.SavedSortiesViewModel = viewModel()
+
+    val hasJoined by participationViewModel.hasJoined.collectAsState()
+    val successMessage by participationViewModel.successMessage.collectAsState()
+    val errorMessage by participationViewModel.errorMessage.collectAsState()
+
+    // ✅ ADD: Track saved state
+    var isSaved by remember { mutableStateOf(false) }
+    var showShareDialog by remember { mutableStateOf(false) }
+
+    // AI Analysis states
+    val sortieAnalysis by flaskAiViewModel.sortieAnalysis.collectAsState()
+    val analysisLoading by flaskAiViewModel.sortieAnalysisLoading.collectAsState()
+    val analysisError by flaskAiViewModel.sortieAnalysisError.collectAsState()
+    var showAnalysisDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(sortieId) {
+        viewModel.loadSortieDetail(sortieId)
+        participationViewModel.loadParticipations(sortieId)
+        // ✅ Initialize and check if sortie is saved
+        savedSortiesViewModel.initialize(context)
+        isSaved = savedSortiesViewModel.isSortieSaved(sortieId)
+    }
+
+    // ✅ Observe saved state changes
+    LaunchedEffect(savedSortiesViewModel.savedSortieIds.collectAsState().value) {
+        isSaved = savedSortiesViewModel.isSortieSaved(sortieId)
+    }
+
+    // Check if user has joined
+    LaunchedEffect(participationViewModel.participations.collectAsState().value) {
+        participationViewModel.checkIfJoined(sortieId, currentUserId)
+    }
+
+    // Show success/error messages
+    LaunchedEffect(successMessage) {
+        successMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_SHORT).show()
+            participationViewModel.clearMessages()
+        }
+    }
+
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            android.widget.Toast.makeText(context, it, android.widget.Toast.LENGTH_LONG).show()
+            participationViewModel.clearMessages()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                Brush.verticalGradient(
+                    colors = listOf(
+                        BackgroundGradientStart,
+                        BackgroundDark,
+                        BackgroundGradientEnd
+                    )
+                )
+            )
+    ) {
+        when {
+            viewModel.isLoading -> {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(color = GreenAccent)
+                }
+            }
+
+            viewModel.errorMessage != null -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ErrorOutline,
+                        contentDescription = "Error",
+                        tint = ErrorRed,
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = viewModel.errorMessage ?: "Unknown error",
+                        color = TextPrimary,
+                        fontSize = 16.sp
+                    )
+                    Spacer(modifier = Modifier.height(24.dp))
+                    Button(
+                        onClick = { navController.popBackStack() },
+                        colors = ButtonDefaults.buttonColors(containerColor = GreenAccent)
+                    ) {
+                        Text("Go Back")
+                    }
+                }
+            }
+
+            viewModel.sortie != null -> {
+                SortieDetailContent(
+                    sortie = viewModel.sortie!!,
+                    token = token,
+                    currentUserId = currentUserId,  // ✅ Pass currentUserId
+                    hasJoined = hasJoined,
+                    isCreator = viewModel.sortie!!.createurId.id == currentUserId,
+                    isSaved = isSaved,
+                    onBackClick = {
+                        Log.d("SortieDetailScreen", "========== BACK BUTTON CLICKED ==========")
+                        Log.d("SortieDetailScreen", "Current destination: ${navController.currentDestination?.route}")
+                        Log.d("SortieDetailScreen", "Previous back stack entry: ${navController.previousBackStackEntry?.destination?.route}")
+                        try {
+                            val result = navController.popBackStack()
+                            Log.d("SortieDetailScreen", "PopBackStack result: $result")
+                            if (!result) {
+                                Log.e("SortieDetailScreen", "❌ PopBackStack failed - no destination to pop to")
+                                // Fallback: navigate to home
+                                navController.navigate("home") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                                Log.d("SortieDetailScreen", "✅ Navigated to home as fallback")
+                            } else {
+                                Log.d("SortieDetailScreen", "✅ Successfully popped back stack")
+                            }
+                        } catch (e: Exception) {
+                            Log.e("SortieDetailScreen", "❌ Error during navigation: ${e.message}", e)
+                            // Try fallback navigation on error
+                            try {
+                                navController.navigate("home") {
+                                    popUpTo(0) { inclusive = true }
+                                }
+                                Log.d("SortieDetailScreen", "✅ Navigated to home after error")
+                            } catch (e2: Exception) {
+                                Log.e("SortieDetailScreen", "❌ Fallback navigation also failed: ${e2.message}", e2)
+                            }
+                        }
+                        Log.d("SortieDetailScreen", "=========================================")
+                    },
+                    onJoinClick = {
+                        Log.d("SortieDetailScreen", "Join button clicked, token available: ${token.isNotEmpty()}")
+                        if (token.isEmpty()) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Veuillez vous connecter pour rejoindre cette sortie",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            participationViewModel.joinSortie(sortieId, token)
+                        }
+                    },
+                    onManageRequestsClick = {
+                        navController.navigate(NavigationRoutes.participationRequestsRoute(sortieId))
+                    },
+                    onSaveClick = {
+                        if (isSaved) {
+                            savedSortiesViewModel.removeSavedSortie(context, sortieId)
+                            android.widget.Toast.makeText(context, "Sortie retirée des favoris", android.widget.Toast.LENGTH_SHORT).show()
+                        } else {
+                            viewModel.sortie?.let { sortie ->
+                                savedSortiesViewModel.saveSortie(context, sortie)
+                                android.widget.Toast.makeText(context, "Sortie sauvegardée ✅", android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    onShareClick = {
+                        showShareDialog = true
+                    },
+                    onAnalyzeClick = {
+                        if (token.isEmpty()) {
+                            android.widget.Toast.makeText(
+                                context,
+                                "Veuillez vous connecter pour analyser cette sortie",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            flaskAiViewModel.loadPersonalizedSortieAnalysis(token, sortieId)
+                            showAnalysisDialog = true
+                        }
+                    },
+                    navController = navController
+                )
+
+                // ✅ Share Dialog
+                if (showShareDialog) {
+                    ShareSortieDialog(
+                        sortie = viewModel.sortie!!,
+                        onDismiss = { showShareDialog = false }
+                    )
+                }
+
+                // ✅ AI Analysis Dialog
+                if (showAnalysisDialog) {
+                    SortieAnalysisDialog(
+                        analysis = sortieAnalysis,
+                        isLoading = analysisLoading,
+                        error = analysisError,
+                        onDismiss = {
+                            showAnalysisDialog = false
+                            flaskAiViewModel.clearSortieAnalysis()
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun SortieDetailContent(
+    sortie: SortieResponse,
+    token: String,
+    currentUserId: String,  // ✅ Added to check if creator is current user
+    hasJoined: Boolean = false,
+    isCreator: Boolean = false,
+    isSaved: Boolean = false,
+    onBackClick: () -> Unit,
+    onJoinClick: () -> Unit = {},
+    onManageRequestsClick: () -> Unit = {},
+    onSaveClick: () -> Unit = {},
+    onShareClick: () -> Unit = {},
+    onAnalyzeClick: () -> Unit = {},
+    navController: NavController
+) {
+    fun formatDate(dateString: String): String {
+        return try {
+            val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+            inputFormat.timeZone = TimeZone.getTimeZone("UTC")
+            val date = inputFormat.parse(dateString)
+
+            val outputFormat = SimpleDateFormat("EEEE, MMM dd, yyyy • HH:mm", Locale.getDefault())
+            date?.let { outputFormat.format(it) } ?: dateString
+        } catch (e: Exception) {
+            dateString
+        }
+    }
+
+    fun formatDuration(seconds: Number?): String {
+        if (seconds == null) return "N/A"
+        val totalSeconds = seconds.toInt()
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+
+        return when {
+            hours > 0 && minutes > 0 -> "${hours}h ${minutes}min"
+            hours > 0 -> "${hours}h"
+            minutes > 0 -> "${minutes}min"
+            else -> "< 1min"
+        }
+    }
+
+    fun getDefaultImage(type: String): Int {
+        return when (type) {
+            "VELO" -> R.drawable.homme
+            "RANDONNEE" -> R.drawable.jbal
+            "CAMPING" -> R.drawable.camping
+            else -> R.drawable.download
+        }
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+    ) {
+        // Hero Image Section
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(300.dp)
+        ) {
+            if (sortie.photo != null && sortie.photo.isNotEmpty()) {
+                AsyncImage(
+                    model = sortie.photo,
+                    contentDescription = sortie.titre,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize(),
+                    error = painterResource(id = getDefaultImage(sortie.type))
+                )
+            } else {
+                Image(
+                    painter = painterResource(id = getDefaultImage(sortie.type)),
+                    contentDescription = sortie.titre,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
+            // Gradient overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Black.copy(alpha = 0.5f),
+                                Color.Transparent,
+                                Color.Black.copy(alpha = 0.8f)
+                            )
+                        )
+                    )
+            )
+
+            // Top Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .align(Alignment.TopStart),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                IconButton(
+                    onClick = onBackClick,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color.White
+                    )
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    IconButton(
+                        onClick = onShareClick,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Share",
+                            tint = Color.White
+                        )
+                    }
+
+                    IconButton(
+                        onClick = onSaveClick,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = if (isSaved) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                            contentDescription = if (isSaved) "Saved" else "Save",
+                            tint = if (isSaved) GreenAccent else Color.White
+                        )
+                    }
+                }
+            }
+
+            // Title Section at bottom
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(20.dp)
+            ) {
+                // Type and Camping Badges
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Surface(
+                        shape = RoundedCornerShape(8.dp),
+                        color = GreenAccent.copy(alpha = 0.9f)
+                    ) {
+                        Text(
+                            text = when (sortie.type) {
+                                "RANDONNEE" -> "Hiking"
+                                "VELO" -> "Cycling"
+                                "CAMPING" -> "Camping"
+                                else -> sortie.type
+                            },
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        )
+                    }
+
+                    if (sortie.optionCamping) {
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = SuccessGreen.copy(alpha = 0.9f)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Terrain,
+                                    contentDescription = "Camping",
+                                    tint = Color.White,
+                                    modifier = Modifier.size(12.dp)
+                                )
+                                Text(
+                                    text = "Camping Included",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = sortie.titre,
+                    color = Color.White,
+                    fontSize = 28.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+
+        // Content Section
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(20.dp)
+        ) {
+            // Creator Info
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = CardGlass,
+                border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(CardDark.copy(alpha = 0.4f))
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // ✅ Fetch avatar from user profile (same as HomeExploreScreen)
+                    val creatorAvatarUrl = remember(sortie.createurId.id) {
+                        mutableStateOf<String?>(null)
+                    }
+
+                    LaunchedEffect(sortie.createurId.id) {
+                        Log.d("SortieDetail", "🔄 Fetching avatar for creator ${sortie.createurId.id}")
+                        val avatar = AvatarCache.getAvatarForUser(
+                            userId = sortie.createurId.id,
+                            token = token
+                        )
+                        creatorAvatarUrl.value = avatar
+                        Log.d("SortieDetail", "✅ Got avatar: $avatar")
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(50.dp)
+                            .clip(CircleShape)
+                            .border(2.dp, GreenAccent, CircleShape)
+                            .background(CardDark)
+                            .clickable {
+                                // Navigate to creator's profile
+                                navController.navigate("userProfile/${sortie.createurId.id}")
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        // Display the fetched avatar
+                        UserAvatar(
+                            avatarUrl = creatorAvatarUrl.value,
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                    }
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Organized by",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
+                        Text(
+                            text = sortie.createurId.email.substringBefore("@"),
+                            color = TextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    // ✅ Message button - HIDE if creator is the current user
+                    if (sortie.createurId.id != currentUserId) {
+                        IconButton(onClick = {
+                            // Navigate to creator's profile where the user can start a conversation
+                            navController.navigate("userProfile/${sortie.createurId.id}")
+                        }) {
+                            Icon(
+                                imageVector = Icons.Default.Message,
+                                contentDescription = "Message",
+                                tint = GreenAccent
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Quick Stats
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                StatCard(
+                    icon = Icons.Default.Group,
+                    label = "Participants",
+                    value = "${sortie.participants.size}/${sortie.capacite}",
+                    modifier = Modifier.weight(1f)
+                )
+
+                StatCard(
+                    icon = Icons.Default.Route,
+                    label = "Distance",
+                    value = String.format(
+                        "%.2f km",
+                        (sortie.itineraire?.distance?.div(1000.0) ?: 0.0)
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+
+                StatCard(
+                    icon = Icons.Default.Timer,
+                    label = "Duration",
+                    value = formatDuration(sortie.itineraire?.dureeEstimee),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+
+            // MAP SECTION - Route Display
+            if (sortie.itineraire != null) {
+                InfoSection(
+                    title = "Route Map",
+                    icon = Icons.Default.Map
+                ) {
+                    // UNIVERSAL iOS FIX — catches ALL broken coordinates
+                    val rawStartLat = sortie.itineraire.pointDepart.latitude
+                    val rawStartLng = sortie.itineraire.pointDepart.longitude
+                    val rawEndLat = sortie.itineraire.pointArrivee.latitude
+                    val rawEndLng = sortie.itineraire.pointArrivee.longitude
+
+                    val isBadIOSCoords = rawStartLat in 45.83..45.84 && rawStartLng in 6.86..6.87 ||
+                            rawEndLat in 45.83..45.84 && rawEndLng in 6.86..6.87
+
+                    val startLat =
+                        if (isBadIOSCoords || rawStartLat == 0.0 || rawStartLat !in -90.0..90.0) {
+                            Log.d("MAP_FIX", "Bad iOS coords detected → using real French trail")
+                            45.8780
+                        } else rawStartLat
+
+                    val startLng =
+                        if (isBadIOSCoords || rawStartLng == 0.0 || rawStartLng !in -180.0..180.0) 6.8650 else rawStartLng
+                    val endLat =
+                        if (isBadIOSCoords || rawEndLat == 0.0 || rawEndLat !in -90.0..90.0) 45.9237 else rawEndLat
+                    val endLng =
+                        if (isBadIOSCoords || rawEndLng == 0.0 || rawEndLng !in -180.0..180.0) 6.8694 else rawEndLng
+
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().height(300.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = CardDark
+                    ) {
+                        GoogleMapView(
+                            startLat = startLat,
+                            startLng = startLng,
+                            endLat = endLat,
+                            endLng = endLng,
+                            activityType = sortie.type
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly
+                    ) {
+                        LegendItem(color = Color(0xFF4ADE80), label = "Start")
+                        LegendItem(color = Color(0xFF00BFFF), label = "Meeting Points")
+                        LegendItem(color = Color(0xFFEF4444), label = "Finish")
+                    }
+                }
+            }
+
+            // Date & Time
+            InfoSection(
+                title = "Date & Time",
+                icon = Icons.Default.CalendarToday
+            ) {
+                Text(
+                    text = formatDate(sortie.date),
+                    color = TextPrimary,
+                    fontSize = 15.sp
+                )
+            }
+
+            // Description
+            InfoSection(
+                title = "Description",
+                icon = Icons.Default.Description
+            ) {
+                Text(
+                    text = sortie.description,
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    lineHeight = 22.sp
+                )
+            }
+
+            // AI Analysis Button
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .clickable { onAnalyzeClick() },
+                shape = RoundedCornerShape(16.dp),
+                color = GreenAccent.copy(alpha = 0.15f),
+                border = androidx.compose.foundation.BorderStroke(1.dp, GreenAccent)
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = "AI Analysis",
+                        tint = GreenAccent,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Text(
+                        text = "Analyse Personnalisée IA",
+                        color = GreenAccent,
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            // CAMPING – BEAUTIFUL & VISIBLE
+            if (sortie.optionCamping && sortie.camping != null) {
+                InfoSection(title = "Camping", icon = Icons.Default.Terrain) {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+
+                        // Nom + Prix
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = sortie.camping.nom,
+                                color = TextPrimary,
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "${sortie.camping.prix} DT",
+                                color = GreenAccent,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        // Lieu
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Place,
+                                null,
+                                tint = GreenAccent,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(sortie.camping.lieu, color = TextSecondary, fontSize = 15.sp)
+                        }
+
+                        // UNIQUEMENT Check-out (plus de Check-in)
+                        if (sortie.camping.dateFin != null) {
+                            HorizontalDivider(color = BorderColor.copy(alpha = 0.5f))
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Check-out", color = TextSecondary, fontSize = 13.sp)
+                                Text(
+                                    text = formatDate(sortie.camping.dateFin),
+                                    color = TextPrimary,
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Join Button
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (isCreator) {
+                    // Creator sees "Manage Requests" button
+                    Button(
+                        onClick = onManageRequestsClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = GreenAccent
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Group,
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Gérer les demandes",
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                } else {
+                    // Participants see Join/Already Joined button
+                    Button(
+                        onClick = onJoinClick,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(56.dp),
+                        enabled = !hasJoined && sortie.participants.size < sortie.capacite,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = when {
+                                hasJoined -> CardDark
+                                sortie.participants.size >= sortie.capacite -> CardDark
+                                else -> GreenAccent
+                            }
+                        ),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Icon(
+                            imageVector = when {
+                                hasJoined -> Icons.Default.Check
+                                sortie.participants.size >= sortie.capacite -> Icons.Default.Block
+                                else -> Icons.Default.PersonAdd
+                            },
+                            contentDescription = null,
+                            modifier = Modifier.size(20.dp),
+                            tint = when {
+                                hasJoined -> GreenAccent
+                                sortie.participants.size >= sortie.capacite -> TextSecondary
+                                else -> Color.White
+                            }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = when {
+                                hasJoined -> "Demande envoyée"
+                                sortie.participants.size >= sortie.capacite -> "Complet"
+                                else -> "Rejoindre l'aventure"
+                            },
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = when {
+                                hasJoined -> GreenAccent
+                                sortie.participants.size >= sortie.capacite -> TextSecondary
+                                else -> Color.White
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+
+// ✅ GoogleMap Component - With real route following roads and pause points every 0.5km
+            @Composable
+            fun GoogleMapView(
+                startLat: Double,
+                startLng: Double,
+                endLat: Double,
+                endLng: Double,
+                activityType: String = "VELO" // Default fallback
+            ) {
+                val startPosition = LatLng(startLat, startLng)
+                val endPosition = LatLng(endLat, endLng)
+
+                val cameraPositionState = rememberCameraPositionState {
+                    position = CameraPosition.fromLatLngZoom(
+                        LatLng((startLat + endLat) / 2, (startLng + endLng) / 2),
+                        11f
+                    )
+                }
+
+                var routePoints by remember { mutableStateOf<List<LatLng>>(emptyList()) }
+                var pausePoints by remember { mutableStateOf<List<LatLng>>(emptyList()) }
+                var isLoading by remember { mutableStateOf(true) }
+
+                LaunchedEffect(startLat, startLng, endLat, endLng, activityType) {
+                    isLoading = true
+                    routePoints = emptyList()
+                    pausePoints = emptyList()
+
+                    withContext(Dispatchers.IO) {
+                        try {
+                            val apiKey =
+                                "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjVkNzZmZDM5ZjI5MjRkMTQ4MzUzYWU1MDVmMjlkYmNlIiwiaCI6Im11cm11cjY0In0="
+                            val profile = when (activityType.uppercase()) {
+                                "RANDONNEE" -> "foot-hiking"
+                                "VELO" -> "cycling-regular"
+                                else -> "cycling-regular"
+                            }
+
+                            val url =
+                                "https://api.openrouteservice.org/v2/directions/$profile/geojson?api_key=$apiKey"
+
+                            Log.d("ORS_Request", "POST → $url")
+
+                            val connection = URL(url).openConnection() as HttpURLConnection
+                            connection.requestMethod = "POST"
+                            connection.setRequestProperty("Authorization", apiKey)
+                            connection.setRequestProperty("Content-Type", "application/json")
+                            connection.setRequestProperty("Accept", "application/geo+json")
+                            connection.doOutput = true
+
+                            val requestBody = """
+                {
+                    "coordinates": [
+                        [$startLng, $startLat],
+                        [$endLng, $endLat]
+                    ],
+                    "radiuses": [2000, 2000],
+                    "instructions": false,
+                    "preference": "recommended"
+                }
+            """.trimIndent()
+
+                            connection.outputStream.bufferedWriter().use { it.write(requestBody) }
+
+                            if (connection.responseCode == 200) {
+                                val json = connection.inputStream.bufferedReader().readText()
+                                val points = parseORSRoute(json)
+                                if (points.isNotEmpty()) {
+                                    routePoints = points
+                                    pausePoints = calculatePausePointsEvery500m(points)
+                                    Log.d(
+                                        "MapSuccess",
+                                        "Route loaded: ${points.size} points | ${pausePoints.size} pause points"
+                                    )
+                                } else {
+                                    routePoints = listOf(startPosition, endPosition)
+                                }
+                            } else {
+                                val error = connection.errorStream?.bufferedReader()?.readText()
+                                    ?: "Unknown"
+                                Log.e("MapError", "ORS ${connection.responseCode}: $error")
+                                routePoints = listOf(startPosition, endPosition)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("MapException", "Failed", e)
+                            routePoints = listOf(startPosition, endPosition)
+                        } finally {
+                            isLoading = false
+                        }
+                    }
+
+                    if (routePoints.size > 2) {
+                        val builder = LatLngBounds.builder()
+                        routePoints.forEach { builder.include(it) }
+                        val bounds = builder.build()
+                        cameraPositionState.animate(
+                            CameraUpdateFactory.newLatLngBounds(
+                                bounds,
+                                120
+                            )
+                        )
+                    }
+                }
+
+                Box(modifier = Modifier.fillMaxSize()) {
+                    GoogleMap(
+                        modifier = Modifier.fillMaxSize(),
+                        cameraPositionState = cameraPositionState,
+                        uiSettings = MapUiSettings(
+                            zoomControlsEnabled = true,
+                            myLocationButtonEnabled = false,
+                            mapToolbarEnabled = false
+                        )
+                    ) {
+                        if (routePoints.isNotEmpty()) {
+                            Polyline(points = routePoints, color = Color(0xFF4ADE80), width = 12f)
+                        }
+
+                        // Start - Green
+                        Marker(
+                            state = MarkerState(startPosition),
+                            title = "Start",
+                            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)
+                        )
+                        // End - Red
+                        Marker(
+                            state = MarkerState(endPosition),
+                            title = "Finish",
+                            icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_RED)
+                        )
+                        // Pause points every 0.5 km - Blue
+                        pausePoints.forEachIndexed { i, point ->
+                            Marker(
+                                state = MarkerState(point),
+                                title = "Pause ${i + 1}",
+                                snippet = "${"%.1f".format((i + 1) * 0.5)} km",
+                                icon = BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_AZURE)
+                            )
+                            Circle(
+                                center = point,
+                                radius = 60.0,
+                                fillColor = Color((0x4000BFFF)),
+                                strokeColor = Color(0xFF00BFFF),
+                                strokeWidth = 3f
+                            )
+                        }
+                    }
+
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center),
+                            color = GreenAccent
+                        )
+                    }
+                }
+            }
+
+// HELPER FUNCTIONS - Put these inside the same file (below GoogleMapView)
+
+private fun parseORSRoute(json: String): List<LatLng> {
+    val list = mutableListOf<LatLng>()
+    try {
+        val root = JSONObject(json)
+        val features = root.getJSONArray("features")
+        if (features.length() == 0) return emptyList()
+
+        val coordinates = features.getJSONObject(0)
+            .getJSONObject("geometry")
+            .getJSONArray("coordinates")
+
+        for (i in 0 until coordinates.length()) {
+            val coord = coordinates.getJSONArray(i)
+            val lng = coord.getDouble(0)
+            val lat = coord.getDouble(1)
+            list.add(LatLng(lat, lng))
+        }
+    } catch (e: Exception) {
+        Log.e("ParseORS", "Failed to parse route", e)
+    }
+    return list
+}
+
+private fun calculateDistance(p1: LatLng, p2: LatLng): Double {
+    val earthRadius = 6371000.0 // meters
+    val dLat = Math.toRadians(p2.latitude - p1.latitude)
+    val dLng = Math.toRadians(p2.longitude - p1.longitude)
+    val a = sin(dLat / 2).pow(2) +
+            cos(Math.toRadians(p1.latitude)) * cos(Math.toRadians(p2.latitude)) *
+            sin(dLng / 2).pow(2)
+    val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    return earthRadius * c
+}
+
+private fun calculatePausePointsEvery500m(route: List<LatLng>): List<LatLng> {
+    val pausePoints = mutableListOf<LatLng>()
+    val intervalMeters = 4000.0 // 0.5 km
+    var distanceSoFar = 0.0
+
+    for (i in 1 until route.size) {
+        val from = route[i - 1]
+        val to = route[i]
+        val segmentDistance = calculateDistance(from, to)
+
+        var remainingInSegment = segmentDistance
+
+        while (distanceSoFar + remainingInSegment >= intervalMeters) {
+            val needed = intervalMeters - distanceSoFar
+            val ratio = needed / segmentDistance
+
+            val pauseLat = from.latitude + ratio * (to.latitude - from.latitude)
+            val pauseLng = from.longitude + ratio * (to.longitude - from.longitude)
+
+            pausePoints.add(LatLng(pauseLat, pauseLng))
+
+            remainingInSegment -= needed
+            distanceSoFar = 0.0 // reset for next 0.5km
+        }
+
+        distanceSoFar += segmentDistance
+        if (distanceSoFar >= intervalMeters) {
+            distanceSoFar -= intervalMeters
+        }
+    }
+
+    return pausePoints
+}
+
+
+@Composable
+fun StatCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        color = CardGlass,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .background(CardDark.copy(alpha = 0.4f))
+                .padding(vertical = 10.dp, horizontal = 12.dp), // ← plus compact            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                tint = GreenAccent,
+                modifier = Modifier.size(20.dp) // icône plus petite
+            )//            )
+            Text(
+                text = value,
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                text = label,
+                color = TextSecondary,
+                fontSize = 10.sp
+            )
+        }
+    }
+}
+
+@Composable
+fun InfoSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    content: @Composable () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = CardGlass,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardDark.copy(alpha = 0.4f))
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = GreenAccent,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = title,
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+fun LegendItem(color: androidx.compose.ui.graphics.Color, label: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(12.dp)
+                .background(color, CircleShape)
+        )
+        Text(
+            text = label,
+            color = TextSecondary,
+            fontSize = 11.sp
+        )
+    }
+}
+
+// ✅ Share Sortie Dialog - Share to discussions as card
+@Composable
+fun ShareSortieDialog(
+    sortie: SortieResponse,
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
+
+    // Get user's discussions via MessagesViewModel
+    val messagesViewModel = remember { com.example.dam.viewmodel.MessagesViewModel() }
+    val chatGroups by messagesViewModel.chatGroups.collectAsState()
+
+    LaunchedEffect(Unit) {
+        messagesViewModel.loadUserChats(context)
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Share,
+                    contentDescription = null,
+                    tint = GreenAccent
+                )
+                Text(
+                    "Partager dans une discussion",
+                    color = TextPrimary,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    "Sélectionnez une discussion:",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+
+                if (chatGroups.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            CircularProgressIndicator(
+                                color = GreenAccent,
+                                modifier = Modifier.size(32.dp)
+                            )
+                            Text(
+                                "Chargement...",
+                                color = TextSecondary,
+                                fontSize = 12.sp
+                            )
+                        }
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 300.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(chatGroups.size) { index ->
+                            val chatGroup = chatGroups[index]
+                            DiscussionCard(
+                                sortieName = chatGroup.name,
+                                sortieEmoji = chatGroup.emoji,
+                                onClick = {
+                                    // Create structured share message with sortie data
+                                    val shareMessage = "SHARED_SORTIE:${sortie.id}\nTITLE:${sortie.titre}\nCREATOR:${sortie.createurId.firstName ?: ""} ${sortie.createurId.lastName ?: ""}\nIMAGE:${sortie.photo ?: ""}\nDATE:${sortie.date}\nTYPE:${sortie.type}"
+
+                                    // Debug log
+                                    Log.d("ShareSortie", "========================================")
+                                    Log.d("ShareSortie", "📤 Sharing sortie to chat: ${chatGroup.name}")
+                                    Log.d("ShareSortie", "Chat sortieId: ${chatGroup.sortieId}")
+                                    Log.d("ShareSortie", "Message to send:")
+                                    Log.d("ShareSortie", shareMessage)
+                                    Log.d("ShareSortie", "========================================")
+
+                                    // ✅ Send via MessageRepository to persist in database
+                                    coroutineScope.launch(Dispatchers.IO) {
+                                        val messageDto = com.example.dam.models.CreateMessageDto(
+                                            type = com.example.dam.models.MessageType.TEXT,
+                                            content = shareMessage
+                                        )
+
+                                        val token = com.example.dam.utils.UserPreferences.getToken(context)
+                                        if (token != null) {
+                                            val messageRepository = com.example.dam.repository.MessageRepository()
+                                            val result = messageRepository.sendMessage(
+                                                chatGroup.sortieId,
+                                                "Bearer $token",
+                                                messageDto
+                                            )
+
+                                            withContext(Dispatchers.Main) {
+                                                result.onSuccess {
+                                                    Log.d("ShareSortie", "✅ Message saved to database successfully")
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "Sortie partagée dans ${chatGroup.name}",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                    onDismiss()
+                                                }.onFailure { error ->
+                                                    Log.e("ShareSortie", "❌ Failed to share: ${error.message}")
+                                                    android.widget.Toast.makeText(
+                                                        context,
+                                                        "Erreur lors du partage",
+                                                        android.widget.Toast.LENGTH_SHORT
+                                                    ).show()
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Annuler", color = TextSecondary)
+            }
+        },
+        containerColor = CardDark,
+        titleContentColor = TextPrimary,
+        textContentColor = TextSecondary,
+        shape = RoundedCornerShape(20.dp)
+    )
+}
+
+@Composable
+fun DiscussionCard(
+    sortieName: String,
+    sortieEmoji: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        onClick = onClick,
+        shape = RoundedCornerShape(12.dp),
+        color = CardGlass,
+        border = androidx.compose.foundation.BorderStroke(1.dp, BorderColor)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(CardDark.copy(alpha = 0.4f))
+                .padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(GreenAccent.copy(alpha = 0.2f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = sortieEmoji,
+                    fontSize = 20.sp
+                )
+            }
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = sortieName,
+                    color = TextPrimary,
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1
+                )
+                Text(
+                    text = "Discussion de groupe",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+            }
+
+            Icon(
+                imageVector = Icons.Default.Send,
+                contentDescription = "Share",
+                tint = GreenAccent,
+                modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun SortieAnalysisDialog(
+    analysis: com.example.dam.models.PersonalizedSortieAnalysisResponse?,
+    isLoading: Boolean,
+    error: String?,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardDark,
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.AutoAwesome,
+                    contentDescription = null,
+                    tint = GreenAccent
+                )
+                Text(
+                    text = "Analyse IA Personnalisée",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        },
+        text = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 600.dp)
+            ) {
+                when {
+                    isLoading -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            CircularProgressIndicator(color = GreenAccent)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "Analyse en cours...",
+                                color = TextSecondary,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
+                    error != null -> {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ErrorOutline,
+                                contentDescription = null,
+                                tint = ErrorRed,
+                                modifier = Modifier.size(48.dp)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = error,
+                                color = TextPrimary,
+                                fontSize = 14.sp,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                            )
+                        }
+                    }
+                    analysis != null -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Difficulty Analysis
+                            item {
+                                AnalysisSection(
+                                    title = "Niveau de Difficulté",
+                                    icon = Icons.Default.TrendingUp,
+                                    iconColor = when (analysis.analysis.difficultyLabel.uppercase()) {
+                                        "FACILE", "EASY" -> Color(0xFF4ADE80)
+                                        "MOYEN", "MEDIUM", "MODÉRÉ" -> Color(0xFFFBBF24)
+                                        "DIFFICILE", "HARD" -> Color(0xFFEF4444)
+                                        else -> GreenAccent
+                                    }
+                                ) {
+                                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween
+                                        ) {
+                                            Text(
+                                                text = analysis.analysis.difficultyLabel,
+                                                color = TextPrimary,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                            Text(
+                                                text = "${(analysis.analysis.difficultyScore * 10).toInt()}/10",
+                                                color = GreenAccent,
+                                                fontSize = 16.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                        LinearProgressIndicator(
+                                            progress = { analysis.analysis.difficultyScore.toFloat() },
+                                            modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                                            color = when (analysis.analysis.difficultyLabel.uppercase()) {
+                                                "FACILE", "EASY" -> Color(0xFF4ADE80)
+                                                "MOYEN", "MEDIUM", "MODÉRÉ" -> Color(0xFFFBBF24)
+                                                "DIFFICILE", "HARD" -> Color(0xFFEF4444)
+                                                else -> GreenAccent
+                                            },
+                                            trackColor = CardGlass
+                                        )
+                                        InfoRow("Durée estimée", analysis.analysis.estimatedDuration)
+                                        InfoRow("Exigence physique", analysis.analysis.physicalDemand)
+                                        InfoRow("Exigence technique", analysis.analysis.technicalDemand)
+                                        InfoRow("Sensibilité météo", analysis.analysis.weatherSensitivity)
+                                        InfoRow("Meilleure saison", analysis.analysis.bestSeason)
+                                    }
+                                }
+                            }
+
+                            // Personalized Tips
+                            if (analysis.personalizedTips.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Conseils Personnalisés",
+                                        icon = Icons.Default.Lightbulb,
+                                        iconColor = Color(0xFFFBBF24)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            analysis.personalizedTips.forEach { tip ->
+                                                TipItem(tip, Color(0xFFFBBF24))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Safety Warnings
+                            if (analysis.safetyWarnings.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Avertissements de Sécurité",
+                                        icon = Icons.Default.Warning,
+                                        iconColor = Color(0xFFEF4444)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            analysis.safetyWarnings.forEach { warning ->
+                                                TipItem(warning, Color(0xFFEF4444))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Preparation Checklist
+                            if (analysis.preparationChecklist.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Liste de Préparation",
+                                        icon = Icons.Default.CheckCircle,
+                                        iconColor = Color(0xFF4ADE80)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            analysis.preparationChecklist.forEach { item ->
+                                                TipItem(item, Color(0xFF4ADE80))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Nutrition Tips
+                            if (analysis.nutritionTips.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Conseils Nutrition",
+                                        icon = Icons.Default.Restaurant,
+                                        iconColor = Color(0xFF10B981)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            analysis.nutritionTips.forEach { tip ->
+                                                TipItem(tip, Color(0xFF10B981))
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Equipment Summary
+                            if (analysis.equipment.isNotEmpty()) {
+                                item {
+                                    AnalysisSection(
+                                        title = "Équipement Recommandé",
+                                        icon = Icons.Default.Backpack,
+                                        iconColor = Color(0xFF3B82F6)
+                                    ) {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            // Summary
+                                            Surface(
+                                                color = CardGlass,
+                                                shape = RoundedCornerShape(8.dp)
+                                            ) {
+                                                Column(
+                                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    EquipmentSummaryRow("Essentiel", analysis.equipmentSummary.essentialCount, Color(0xFFEF4444))
+                                                    EquipmentSummaryRow("Recommandé", analysis.equipmentSummary.recommendedCount, Color(0xFFFBBF24))
+                                                    EquipmentSummaryRow("Optionnel", analysis.equipmentSummary.optionalCount, Color(0xFF4ADE80))
+                                                    HorizontalDivider(color = BorderColor, thickness = 1.dp)
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween
+                                                    ) {
+                                                        Text("Coût estimé:", color = TextSecondary, fontSize = 12.sp)
+                                                        Text(
+                                                            analysis.equipmentSummary.totalEstimatedCost,
+                                                            color = GreenAccent,
+                                                            fontSize = 14.sp,
+                                                            fontWeight = FontWeight.Bold
+                                                        )
+                                                    }
+                                                }
+                                            }
+
+                                            // Equipment items
+                                            analysis.equipment.take(5).forEach { item ->
+                                                EquipmentCard(item)
+                                            }
+
+                                            if (analysis.equipment.size > 5) {
+                                                Text(
+                                                    text = "+ ${analysis.equipment.size - 5} autres équipements...",
+                                                    color = TextSecondary,
+                                                    fontSize = 12.sp,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss,
+                colors = ButtonDefaults.textButtonColors(contentColor = GreenAccent)
+            ) {
+                Text("Fermer")
+            }
+        }
+    )
+}
+
+@Composable
+fun AnalysisSection(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    iconColor: Color = GreenAccent,
+    content: @Composable () -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(20.dp)
+            )
+            Text(
+                text = title,
+                color = TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.Bold
+            )
+        }
+        Surface(
+            color = CardGlass,
+            shape = RoundedCornerShape(12.dp)
+        ) {
+            Box(modifier = Modifier.fillMaxWidth().padding(12.dp)) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+fun InfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = "$label:",
+            color = TextSecondary,
+            fontSize = 13.sp
+        )
+        Text(
+            text = value,
+            color = TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+fun TipItem(text: String, color: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.Top
+    ) {
+        Box(
+            modifier = Modifier
+                .size(6.dp)
+                .background(color, CircleShape)
+                .padding(top = 6.dp)
+        )
+        Text(
+            text = text,
+            color = TextPrimary,
+            fontSize = 13.sp,
+            lineHeight = 18.sp,
+            modifier = Modifier.weight(1f)
+        )
+    }
+}
+
+@Composable
+fun EquipmentSummaryRow(label: String, count: Int, color: Color) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(8.dp)
+                    .background(color, CircleShape)
+            )
+            Text(text = label, color = TextSecondary, fontSize = 12.sp)
+        }
+        Text(
+            text = count.toString(),
+            color = TextPrimary,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+fun EquipmentCard(item: com.example.dam.models.EquipmentItem) {
+    Surface(
+        color = CardDark,
+        shape = RoundedCornerShape(8.dp),
+        border = androidx.compose.foundation.BorderStroke(
+            1.dp,
+            when (item.necessity.uppercase()) {
+                "ESSENTIAL", "ESSENTIEL" -> Color(0xFFEF4444)
+                "RECOMMENDED", "RECOMMANDÉ" -> Color(0xFFFBBF24)
+                else -> Color(0xFF4ADE80)
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.name,
+                    color = TextPrimary,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = item.category,
+                    color = TextSecondary,
+                    fontSize = 11.sp
+                )
+                if (item.priceRange != null) {
+                    Text(
+                        text = item.priceRange,
+                        color = GreenAccent,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+            Surface(
+                color = when (item.necessity.uppercase()) {
+                    "ESSENTIAL", "ESSENTIEL" -> Color(0xFFEF4444).copy(alpha = 0.2f)
+                    "RECOMMENDED", "RECOMMANDÉ" -> Color(0xFFFBBF24).copy(alpha = 0.2f)
+                    else -> Color(0xFF4ADE80).copy(alpha = 0.2f)
+                },
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Text(
+                    text = when (item.necessity.uppercase()) {
+                        "ESSENTIAL", "ESSENTIEL" -> "Essential"
+                        "RECOMMENDED", "RECOMMANDÉ" -> "Recommandé"
+                        else -> "Optionnel"
+                    },
+                    color = when (item.necessity.uppercase()) {
+                        "ESSENTIAL", "ESSENTIEL" -> Color(0xFFEF4444)
+                        "RECOMMENDED", "RECOMMANDÉ" -> Color(0xFFFBBF24)
+                        else -> Color(0xFF4ADE80)
+                    },
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                )
+            }
+        }
+    }
+}
+
