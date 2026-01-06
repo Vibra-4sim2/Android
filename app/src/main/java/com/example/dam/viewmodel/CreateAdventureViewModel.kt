@@ -17,6 +17,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.io.File
+import java.util.Locale
 
 class CreateAdventureViewModel : ViewModel() {
     private val repo = AdventureRepository()
@@ -179,7 +180,7 @@ class CreateAdventureViewModel : ViewModel() {
                 ?: return Result.Error("Pas de résumé disponible")
 
             val distanceKm = if (summary.distance < 10000)
-                String.format("%.1f", summary.distance / 1000)
+                String.format(Locale.US, "%.1f", summary.distance / 1000)
             else
                 (summary.distance / 1000).toInt().toString()
 
@@ -237,6 +238,16 @@ class CreateAdventureViewModel : ViewModel() {
                     displayName = endAddress.ifEmpty { null },
                     address = endAddress.ifEmpty { null }
                 ),
+                distance = distanceMeters,
+                duree_estimee = durationSeconds
+            )
+
+            val campingData = if (includeCamping) {
+                CampingData(
+                    nom = campingName,
+                    lieu = campingLocation,
+                    prix = campingPrice.toDoubleOrNull() ?: 0.0,
+                    dateDebut = campingStart,
                     dateFin = campingEnd
                 )
             } else null
@@ -252,7 +263,6 @@ class CreateAdventureViewModel : ViewModel() {
                 Log.d("CREATE_ADVENTURE", "Camping Data: Présent")
             }
 
-            // ✅ FIX: Use 'repo' instead of 'repository'
             val result = repo.createSortie(
                 token = token,
                 createurId = userId,
